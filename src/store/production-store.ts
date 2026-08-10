@@ -939,8 +939,7 @@ export const useProductionStore = create<ProductionState>()(
         }),
 
       advanceToNext: () => {
-        const { queue, currentQueueIndex, formatStartTime, soundEnabled, activeLineId } = get();
-        const nextIndex = currentQueueIndex + 1;
+        const { queue, salads, currentQueueIndex, formatStartTime, soundEnabled, activeLineId, activeLineCode } = get();
         const elapsedMs = formatStartTime ? Date.now() - formatStartTime : 0;
         const durationStr = elapsedMs > 0 ? formatDuration(elapsedMs) : "0s";
 
@@ -968,40 +967,91 @@ export const useProductionStore = create<ProductionState>()(
 
         if (soundEnabled) playSynthSound("success");
 
-        if (nextIndex >= queue.length) {
-          if (activeLineId) {
-            syncLineState(activeLineId, false, nextIndex);
+        // Eliminar el formato completado de la cola
+        const remainingQueue = queue.filter((_, idx) => idx !== currentQueueIndex);
+
+        // Actualizar lista de ensaladas removiendo el formato completado
+        const remainingSalads: Salad[] = [];
+        salads.forEach((s) => {
+          const updatedFormats = s.formats.filter((f) => f.id !== completedFormat.formatId);
+          if (updatedFormats.length > 0) {
+            remainingSalads.push({
+              ...s,
+              formats: updatedFormats,
+            });
           }
-          set((state) => ({
+        });
+
+        // Si ya no quedan más formatos en la cola de esta línea:
+        if (remainingQueue.length === 0) {
+          if (activeLineId) {
+            syncLineState(activeLineId, false, 0);
+            syncQueueItems(activeLineId, []);
+          }
+
+          const emptyLineState = {
+            queue: [],
+            salads: [],
+            queueProgress: {},
+            currentQueueIndex: 0,
             isProducing: false,
             currentProgress: null,
-            showTransitionBanner: false,
-            history: [historyItem, ...(state.history || [])].slice(0, 30),
             formatStartTime: null,
             palletSpeeds: [],
+          };
+
+          set((state) => ({
+            ...emptyLineState,
+            lineStorage: {
+              ...state.lineStorage,
+              [activeLineCode]: emptyLineState,
+            },
+            history: [historyItem, ...(state.history || [])].slice(0, 30),
+            showTransitionBanner: false,
           }));
+
+          broadcastLocalChange(activeLineCode);
           return;
         }
 
-        const nextItem = queue[nextIndex];
+        // Si aún quedan formatos pendientes en la cola:
+        const nextQueueIndex = 0; // El siguiente formato pasa al índice 0
+        const nextItem = remainingQueue[nextQueueIndex];
         const nextProgress = (get().queueProgress || {})[nextItem.id] || createInitialProgress(nextItem.id);
 
         if (activeLineId) {
-          syncLineState(activeLineId, true, nextIndex);
+          syncLineState(activeLineId, true, nextQueueIndex);
+          syncQueueItems(activeLineId, remainingQueue);
         }
 
-        set((state) => ({
-          currentQueueIndex: nextIndex,
+        const nextLineState = {
+          queue: remainingQueue,
+          salads: remainingSalads,
+          currentQueueIndex: nextQueueIndex,
           currentProgress: nextProgress,
+          isProducing: true,
           showTransitionBanner: true,
           formatStartTime: Date.now(),
-          history: [historyItem, ...(state.history || [])].slice(0, 30),
           palletSpeeds: [],
+        };
+
+        set((state) => ({
+          ...nextLineState,
+          lineStorage: {
+            ...state.lineStorage,
+            [activeLineCode]: {
+              ...state.lineStorage[activeLineCode],
+              ...nextLineState,
+            },
+          },
+          history: [historyItem, ...(state.history || [])].slice(0, 30),
           queueProgress: {
             ...(state.queueProgress || {}),
             [nextItem.id]: nextProgress,
           },
         }));
+
+        broadcastLocalChange(activeLineCode);
       },
 
       jumpToQueueItem: (index) => {
@@ -1037,18 +1087,36 @@ export const useProductionStore = create<ProductionState>()(
         });
       },
 
-      resetProduction: () =>
-        set({
+      resetProduction: () => {
+        const { activeLineId, activeLineCode } = get();
+        if (activeLineId) {
+          syncLineState(activeLineId, false, 0);
+        }
+        set((state) => ({
           isProducing: false,
           currentQueueIndex: 0,
           currentProgress: null,
           showTransitionBanner: false,
           formatStartTime: null,
           palletSpeeds: [],
-        }),
+          lineStorage: {
+            ...state.lineStorage,
+            [activeLineCode]: {
+              ...(state.lineStorage[activeLineCode] || {}),
+              isProducing: false,
+            },
+          },
+        }));
+        broadcastLocalChange(activeLineCode);
+      },
 
-      clearQueueAndSalads: () =>
-        set({
+      clearQueueAndSalads: () => {
+        const { activeLineId, activeLineCode } = get();
+        if (activeLineId) {
+          syncLineState(activeLineId, false, 0);
+          syncQueueItems(activeLineId, []);
+        }
+        const emptyState = {
           salads: [],
           queue: [],
           currentQueueIndex: 0,
@@ -1057,7 +1125,16 @@ export const useProductionStore = create<ProductionState>()(
           isProducing: false,
           formatStartTime: null,
           palletSpeeds: [],
-        }),
+        };
+        set((state) => ({
+          ...emptyState,
+          lineStorage: {
+            ...state.lineStorage,
+            [activeLineCode]: emptyState,
+          },
+        }));
+        broadcastLocalChange(activeLineCode);
+      },
 
        clearHistory: () =>
         set({ history: [] }),
