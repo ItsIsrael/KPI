@@ -10,16 +10,13 @@ import { Plus, Package, Check, AlertCircle, Sparkles, Layers } from "lucide-reac
 
 const COMMON_SALADS = [
   "César",
-  "Rúcula",
-  "Mezclum",
-  "Primavera",
-  "Pasta",
-  "Tiernos",
+  "César American",
+  "Pasta y Rúcula",
   "Gourmet",
-  "Escarola",
-  "Brotes Tiernos",
-  "Radicchio",
-  "Canónigos",
+  "Pasta y Atún",
+  "Japón",
+  "Digestiva",
+  "Wraps",
 ];
 
 interface QuickQueueBuilderProps {
