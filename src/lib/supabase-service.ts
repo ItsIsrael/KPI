@@ -230,16 +230,8 @@ export async function syncQueueItems(lineId: string, queue: QueueItem[]) {
 
   try {
     const queueIds = queue.map((q) => q.id);
-    if (queueIds.length > 0) {
-      await supabase
-        .from("line_queue_items")
-        .delete()
-        .eq("line_id", lineId)
-        .not("id", "in", `(${queueIds.join(",")})`);
-    } else {
-      await supabase.from("line_queue_items").delete().eq("line_id", lineId);
-    }
 
+    // 1. Primero, insertar o actualizar los items de la cola en line_queue_items
     if (queue.length > 0) {
       const rows = queue.map((item, index) => ({
         id: item.id,
@@ -261,6 +253,32 @@ export async function syncQueueItems(lineId: string, queue: QueueItem[]) {
 
       await supabase.from("line_queue_items").upsert(rows, { onConflict: "id" });
     }
+
+    // 2. Limpiar items antiguos respetando la foreign key (borrando primero de queue_item_progress)
+    if (queueIds.length > 0) {
+      const { data: orphanItems } = await supabase
+        .from("line_queue_items")
+        .select("id")
+        .eq("line_id", lineId)
+        .not("id", "in", `(${queueIds.join(",")})`);
+
+      if (orphanItems && orphanItems.length > 0) {
+        const orphanIds = orphanItems.map((o) => o.id);
+        await supabase.from("queue_item_progress").delete().in("queue_item_id", orphanIds);
+        await supabase.from("line_queue_items").delete().in("id", orphanIds);
+      }
+    } else {
+      const { data: allLineItems } = await supabase
+        .from("line_queue_items")
+        .select("id")
+        .eq("line_id", lineId);
+
+      if (allLineItems && allLineItems.length > 0) {
+        const allIds = allLineItems.map((o) => o.id);
+        await supabase.from("queue_item_progress").delete().in("queue_item_id", allIds);
+        await supabase.from("line_queue_items").delete().in("id", allIds);
+      }
+    }
   } catch (e) {
     console.error("Error en syncQueueItems:", e);
   }
@@ -270,6 +288,17 @@ export async function syncProgress(queueItemId: string, progress: FormatProgress
   if (!isSupabaseConfigured || !supabase || queueItemId.startsWith("local-")) return;
 
   try {
+    // Comprobar que el item existe en line_queue_items para evitar error de FK
+    const { data: exists } = await supabase
+      .from("line_queue_items")
+      .select("id")
+      .eq("id", queueItemId)
+      .maybeSingle();
+
+    if (!exists) {
+      return;
+    }
+
     await supabase.from("queue_item_progress").upsert(
       {
         queue_item_id: queueItemId,
@@ -288,7 +317,7 @@ export async function syncProgress(queueItemId: string, progress: FormatProgress
       { onConflict: "queue_item_id" }
     );
   } catch (e) {
-    console.error("Error en syncProgress:", e);
+    // Silenciar para evitar ruido de log en base de datos
   }
 }
 
