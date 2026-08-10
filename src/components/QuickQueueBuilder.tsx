@@ -35,63 +35,50 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
     }
   }, [activeLineCode]);
 
-  const [saladName, setSaladName] = useState("");
-  const [selectedBoxType, setSelectedBoxType] = useState(DEFAULT_BOX_TYPES[0].name);
-  const [boxesPerPallet, setBoxesPerPallet] = useState(DEFAULT_BOX_TYPES[0].defaultBoxesPerPallet);
-  
-  // Cajas Totales de la Orden (Milagro)
-  const [quantity, setQuantity] = useState("");
-  
-  // Noblejas: Palets y Cajas independientes
-  const [noblejasPallets, setNoblejasPallets] = useState("0");
-  const [noblejasCajas, setNoblejasCajas] = useState("0");
-
-  const [lote, setLote] = useState("");
-  const [cambioLote, setCambioLote] = useState(false);
-  const [fechaCaducidad, setFechaCaducidad] = useState("");
-  const [note, setNote] = useState("");
+  // Form states
+  const [saladName, setSaladName] = useState<string>("César");
+  const [selectedBoxType, setSelectedBoxType] = useState<string>(DEFAULT_BOX_TYPES[0].name);
+  const [quantity, setQuantity] = useState<string>("144");
+  const [noblejasPallets, setNoblejasPallets] = useState<string>("0");
+  const [noblejasCajas, setNoblejasCajas] = useState<string>("0");
+  const [boxesPerPallet, setBoxesPerPallet] = useState<number>(DEFAULT_BOX_TYPES[0].defaultBoxesPerPallet);
+  const [lote, setLote] = useState<string>("");
+  const [fechaCaducidad, setFechaCaducidad] = useState<string>("");
+  const [note, setNote] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
-  const [successFlash, setSuccessFlash] = useState(false);
 
+  // Cálculos en vivo
   const numQuantity = parseInt(quantity, 10) || 0;
   const numNobPallets = parseInt(noblejasPallets, 10) || 0;
   const numNobCajas = parseInt(noblejasCajas, 10) || 0;
-  
-  // Total Cajas de Noblejas = (Palets * Cajas por Palet) + Cajas sueltas
-  const totalNoblejasBoxes = (numNobPallets * boxesPerPallet) + numNobCajas;
+  const totalNoblejasBoxes = numNobPallets * boxesPerPallet + numNobCajas;
 
   const calc = calculateFormat({
-    id: "temp",
+    id: "preview",
     boxType: selectedBoxType,
     quantity: numQuantity,
     noblejas: totalNoblejasBoxes,
     boxesPerPallet: boxesPerPallet,
   });
 
-  const saladsPerBox = getSaladsPerBox(selectedBoxType);
-  const totalSalads = numQuantity * saladsPerBox;
+  const totalSalads = numQuantity * getSaladsPerBox(selectedBoxType);
 
-  const handleSelectBoxType = (typeName: string) => {
-    setSelectedBoxType(typeName);
-    const match = DEFAULT_BOX_TYPES.find((b) => b.name === typeName);
-    if (match) {
-      setBoxesPerPallet(match.defaultBoxesPerPallet);
+  const handleSelectBoxType = (boxName: string) => {
+    setSelectedBoxType(boxName);
+    const box = DEFAULT_BOX_TYPES.find((b) => b.name === boxName);
+    if (box) {
+      setBoxesPerPallet(box.defaultBoxesPerPallet);
     }
   };
 
-  const handleAddQuickQty = (delta: number) => {
-    const next = Math.max(0, numQuantity + delta);
-    setQuantity(String(next));
+  const handleAddQuickQty = (amount: number) => {
+    const current = parseInt(quantity, 10) || 0;
+    setQuantity(String(current + amount));
   };
 
-  const handleAddQuickNobPallet = (delta: number) => {
-    const next = Math.max(0, numNobPallets + delta);
-    setNoblejasPallets(String(next));
-  };
-
-  const handleAddQuickNobCajas = (delta: number) => {
-    const next = Math.max(0, numNobCajas + delta);
-    setNoblejasCajas(String(next));
+  const handleAddQuickNobPallet = (pallets: number) => {
+    const current = parseInt(noblejasPallets, 10) || 0;
+    setNoblejasPallets(String(current + pallets));
   };
 
   const handleResetNoblejas = () => {
@@ -103,77 +90,84 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
     e.preventDefault();
     setError(null);
 
-    const trimmedName = saladName.trim();
-    if (!trimmedName) {
-      setError("Debes indicar o seleccionar el nombre de la ensalada.");
+    if (!saladName.trim()) {
+      setError("Por favor, introduce el nombre de la ensalada.");
       return;
     }
 
     if (numQuantity <= 0) {
-      setError("La cantidad de cajas debe ser mayor que 0.");
+      setError("La cantidad de cajas debe ser mayor a 0.");
       return;
     }
 
     if (totalNoblejasBoxes > numQuantity) {
-      setError("Las cajas de Noblejas no pueden ser mayores que el total de cajas de la orden.");
+      setError("Las cajas de Noblejas no pueden superar las cajas totales de la orden.");
       return;
     }
 
-    const newFormatId = generateId();
-    const newSalad: Salad = {
+    const newFormat = {
       id: generateId(),
-      name: trimmedName,
-      formats: [
-        {
-          id: newFormatId,
-          boxType: selectedBoxType,
-          quantity: numQuantity,
-          noblejas: totalNoblejasBoxes,
-          boxesPerPallet: boxesPerPallet,
-          lote: lote.trim() || undefined,
-          cambioLote: cambioLote,
-          fechaCaducidad: fechaCaducidad.trim() || undefined,
-          note: note.trim() || undefined,
-          linea: selectedLine,
-        },
-      ],
+      boxType: selectedBoxType,
+      quantity: numQuantity,
+      noblejas: totalNoblejasBoxes,
+      boxesPerPallet: boxesPerPallet,
+      note: note.trim() || undefined,
+      lote: lote.trim() || undefined,
+      cambioLote: false,
+      fechaCaducidad: fechaCaducidad.trim() || undefined,
+      linea: selectedLine,
     };
 
+    const newSalad: Salad = {
+      id: generateId(),
+      name: saladName.trim(),
+      formats: [newFormat],
+    };
+
+    // Añadir a la línea seleccionada e iniciar directamente
     await addSalad(newSalad, selectedLine);
+
     if (activeLineCode !== "ALL" && activeLineCode !== selectedLine) {
-      await setActiveLineCode(selectedLine);
+      setActiveLineCode(selectedLine);
     }
 
     // Resetear formulario para entrada rápida continua
-    setQuantity("");
+    setQuantity("144");
     setNoblejasPallets("0");
     setNoblejasCajas("0");
     setLote("");
-    setCambioLote(false);
     setFechaCaducidad("");
     setNote("");
-    setSuccessFlash(true);
-    setTimeout(() => setSuccessFlash(false), 1400);
   };
 
   return (
     <div className={cn(
-      "glass-card rounded-3xl p-4 sm:p-6 border transition-all shadow-xl space-y-4 sm:space-y-5",
-      goldMode ? "border-amber-500/30 bg-[#141006]/90" : "border-white/10 bg-black/50"
+      "glass-card rounded-3xl p-5 sm:p-7 border shadow-xl relative overflow-hidden transition-all space-y-5",
+      goldMode
+        ? "bg-[#141006]/95 border-amber-500/30 text-white"
+        : "bg-white/95 border-emerald-600/20 text-slate-900 shadow-emerald-950/5"
     )}>
-      {/* 1. Selector de Línea de Producción Destino */}
-      <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-3.5 space-y-2">
+      {/* 1. Selector de Línea Destino con Alto Contraste en Ambos Temas */}
+      <div className={cn(
+        "p-4 rounded-2xl border space-y-3 transition-all",
+        goldMode
+          ? "bg-amber-500/[0.04] border-amber-500/20"
+          : "bg-emerald-50/70 border-emerald-600/20"
+      )}>
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <label className="text-[11px] font-black uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-            <Layers className="w-3.5 h-3.5" />
-            <span>¿En qué Línea vas a colocar este formato?</span>
+          <label className={cn(
+            "text-xs font-black uppercase tracking-wider flex items-center gap-2",
+            goldMode ? "text-amber-300" : "text-emerald-800"
+          )}>
+            <Layers className={cn("w-4 h-4", goldMode ? "text-amber-400" : "text-emerald-600")} />
+            <span>¿En qué línea vas a colocar este formato?</span>
           </label>
-          <span className="text-[10px] text-white/40 font-mono">
-            Línea activa: {selectedLine}
+          <span className={cn("text-[11px] font-mono font-bold", goldMode ? "text-white/50" : "text-slate-600")}>
+            Línea activa: <span className={goldMode ? "text-amber-400" : "text-emerald-700"}>{selectedLine}</span>
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           {DEFAULT_PRODUCTION_LINES.map((line) => {
             const isSelected = selectedLine === line.code;
             return (
@@ -187,12 +181,14 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
                   }
                 }}
                 className={cn(
-                  "py-2.5 px-3 rounded-xl border text-center transition-all cursor-pointer font-black text-xs select-none",
+                  "py-3 px-3 rounded-xl border text-center transition-all cursor-pointer font-black text-sm select-none shadow-sm",
                   isSelected
                     ? goldMode
                       ? "bg-amber-500 text-black border-amber-400 shadow-md scale-[1.02]"
-                      : "bg-emerald-500 text-white border-emerald-400 shadow-md scale-[1.02]"
-                    : "bg-white/5 border-white/10 text-white/50 hover:text-white hover:bg-white/10"
+                      : "bg-emerald-600 text-white border-emerald-700 shadow-md scale-[1.02]"
+                    : goldMode
+                    ? "bg-white/5 border-white/10 text-white/70 hover:text-white hover:bg-white/10"
+                    : "bg-white border-slate-300 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-400"
                 )}
               >
                 {line.name}
@@ -206,10 +202,12 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
         {/* 2. Nombre de la Ensalada con chips rápidos */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-[11px] font-black text-white/60 uppercase tracking-wider">
+            <label className={cn("text-[11px] font-black uppercase tracking-wider", goldMode ? "text-white/70" : "text-slate-700")}>
               Ensalada
             </label>
-            <span className="text-[10px] text-white/40 font-medium">Toca una opción o escribe</span>
+            <span className={cn("text-[10px] font-medium", goldMode ? "text-white/40" : "text-slate-500")}>
+              Toca una opción o escribe
+            </span>
           </div>
 
           <div className="flex flex-wrap gap-1.5">
@@ -221,12 +219,14 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
                   type="button"
                   onClick={() => setSaladName(name)}
                   className={cn(
-                    "px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer select-none",
+                    "px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer select-none shadow-sm border",
                     isSelected
                       ? goldMode
-                        ? "bg-amber-500 text-black shadow-md scale-[1.03]"
-                        : "bg-emerald-500 text-white shadow-md scale-[1.03]"
-                      : "bg-white/5 text-white/60 hover:text-white hover:bg-white/10 border border-white/5"
+                        ? "bg-amber-500 text-black border-amber-400 shadow-md scale-[1.03]"
+                        : "bg-emerald-600 text-white border-emerald-700 shadow-md scale-[1.03]"
+                      : goldMode
+                      ? "bg-white/5 text-white/70 hover:text-white hover:bg-white/10 border-white/10"
+                      : "bg-white text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 border-slate-200"
                   )}
                 >
                   {name}
@@ -240,13 +240,18 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
             value={saladName}
             onChange={(e) => setSaladName(e.target.value)}
             placeholder="O escribe otro nombre (ej. Gourmet Promo, Mezclum 200g)..."
-            className="w-full h-11 px-3.5 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder:text-white/30 focus:outline-none focus:border-emerald-500 transition-all font-medium"
+            className={cn(
+              "w-full h-11 px-3.5 rounded-xl border text-sm transition-all font-medium",
+              goldMode
+                ? "bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-amber-400"
+                : "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
+            )}
           />
         </div>
 
         {/* 3. Selector de Tipo de Caja */}
         <div className="space-y-2">
-          <label className="text-[11px] font-black text-white/60 uppercase tracking-wider block">
+          <label className={cn("text-[11px] font-black uppercase tracking-wider block", goldMode ? "text-white/70" : "text-slate-700")}>
             Tipo de Caja
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
@@ -258,51 +263,66 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
                   type="button"
                   onClick={() => handleSelectBoxType(b.name)}
                   className={cn(
-                    "p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col justify-center items-center gap-0.5 select-none",
+                    "p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col justify-center items-center gap-0.5 select-none shadow-sm",
                     isSelected
                       ? goldMode
                         ? "bg-amber-500/20 border-amber-500 text-amber-300 shadow-md font-black ring-1 ring-amber-500/30"
-                        : "bg-emerald-500/20 border-emerald-500 text-emerald-300 shadow-md font-black ring-1 ring-emerald-500/30"
-                      : "bg-white/[0.02] border-white/5 text-white/60 hover:bg-white/5 hover:text-white"
+                        : "bg-emerald-50 border-emerald-600 text-emerald-800 shadow-md font-black ring-2 ring-emerald-600/30"
+                      : goldMode
+                      ? "bg-white/[0.02] border-white/5 text-white/60 hover:bg-white/5 hover:text-white"
+                      : "bg-white border-slate-200 text-slate-700 hover:bg-emerald-50 hover:border-emerald-300"
                   )}
                 >
                   <span className="text-xs font-bold">{b.name}</span>
-                  <span className="text-[10px] text-white/40 font-mono">{b.defaultBoxesPerPallet} c/palet</span>
+                  <span className={cn("text-[10px] font-mono", goldMode ? "text-white/40" : "text-slate-500")}>{b.defaultBoxesPerPallet} c/palet</span>
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* 4. Cantidad de Cajas Totales y Noblejas (Responsive 2 Columnas) */}
+        {/* 4. Cantidad de Cajas Totales y Noblejas */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-          {/* Columna A: Cantidad Total de Cajas (Solo Cajas para Milagro) */}
-          <div className="space-y-2 bg-white/[0.02] border border-white/5 rounded-2xl p-3.5">
+          {/* Columna A: Cantidad Total de Cajas */}
+          <div className={cn(
+            "space-y-2 rounded-2xl p-4 border shadow-sm",
+            goldMode ? "bg-white/[0.02] border-white/5" : "bg-emerald-50/40 border-emerald-600/15"
+          )}>
             <div className="flex items-center justify-between">
-              <label className="text-[11px] font-black text-white/80 uppercase tracking-wider flex items-center gap-1.5">
-                <Package className="w-3.5 h-3.5 text-emerald-400" />
+              <label className={cn("text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5", goldMode ? "text-white/80" : "text-slate-800")}>
+                <Package className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Cajas Totales de la Orden</span>
               </label>
               {numQuantity > 0 && (
-                <span className="text-xs font-mono font-bold text-emerald-400">
+                <span className="text-xs font-mono font-bold text-emerald-600">
                   {calc.pallets}p + {calc.pico}c
                 </span>
               )}
             </div>
 
-            <div className="flex gap-1.5 items-center">
+            <div className="flex gap-2 items-center">
               <input
                 type="number"
                 min="1"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 placeholder="Ej: 144"
-                className="flex-1 h-12 px-3 rounded-xl bg-white/5 border border-white/10 text-white text-base font-mono font-black placeholder:text-white/30 focus:outline-none focus:border-emerald-500 transition-all"
+                className={cn(
+                  "flex-1 h-12 px-3 rounded-xl border text-base font-mono font-black transition-all",
+                  goldMode
+                    ? "bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-amber-400"
+                    : "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
+                )}
               />
               <button
                 type="button"
                 onClick={() => handleAddQuickQty(boxesPerPallet)}
-                className="h-12 px-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-[11px] font-bold transition-all cursor-pointer shrink-0"
+                className={cn(
+                  "h-12 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer shrink-0 shadow-sm",
+                  goldMode
+                    ? "bg-white/5 hover:bg-white/10 border-white/10 text-white"
+                    : "bg-white hover:bg-emerald-50 border-slate-300 text-slate-800"
+                )}
                 title={`Añadir 1 palet completo (${boxesPerPallet} cajas)`}
               >
                 +1 Palet
@@ -310,22 +330,30 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
               <button
                 type="button"
                 onClick={() => handleAddQuickQty(50)}
-                className="h-12 px-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-[11px] font-bold transition-all cursor-pointer shrink-0"
+                className={cn(
+                  "h-12 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer shrink-0 shadow-sm",
+                  goldMode
+                    ? "bg-white/5 hover:bg-white/10 border-white/10 text-white"
+                    : "bg-white hover:bg-emerald-50 border-slate-300 text-slate-800"
+                )}
               >
                 +50
               </button>
             </div>
           </div>
 
-          {/* Columna B: Noblejas (Palets + Cajas Independientes) */}
-          <div className="space-y-2 bg-purple-500/[0.03] border border-purple-500/15 rounded-2xl p-3.5">
+          {/* Columna B: Noblejas */}
+          <div className={cn(
+            "space-y-2 rounded-2xl p-4 border shadow-sm",
+            goldMode ? "bg-purple-500/[0.03] border-purple-500/15" : "bg-purple-50/70 border-purple-200"
+          )}>
             <div className="flex items-center justify-between">
-              <label className="text-[11px] font-black text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-purple-400" />
+              <label className="text-[11px] font-black text-purple-700 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-purple-500" />
                 <span>Noblejas (Palets y Cajas)</span>
               </label>
               {totalNoblejasBoxes > 0 && (
-                <span className="text-xs font-mono font-bold text-purple-300">
+                <span className="text-xs font-mono font-bold text-purple-700">
                   = {totalNoblejasBoxes} cajas ({numNobPallets}p + {numNobCajas}c)
                 </span>
               )}
@@ -333,7 +361,7 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
 
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <span className="text-[9px] uppercase font-bold text-purple-300/60 block">Palets</span>
+                <span className={cn("text-[9px] uppercase font-bold block", goldMode ? "text-purple-300/60" : "text-purple-700")}>Palets</span>
                 <div className="flex gap-1 items-center">
                   <input
                     type="number"
@@ -341,12 +369,22 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
                     value={noblejasPallets}
                     onChange={(e) => setNoblejasPallets(e.target.value)}
                     placeholder="0"
-                    className="w-full h-11 px-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-200 text-sm font-mono font-bold focus:outline-none focus:border-purple-400 transition-all"
+                    className={cn(
+                      "w-full h-11 px-2.5 rounded-xl border text-sm font-mono font-bold transition-all",
+                      goldMode
+                        ? "bg-purple-500/10 border-purple-500/20 text-purple-200"
+                        : "bg-white border-purple-300 text-purple-950 placeholder:text-purple-300"
+                    )}
                   />
                   <button
                     type="button"
                     onClick={() => handleAddQuickNobPallet(1)}
-                    className="h-11 px-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 text-xs font-bold transition-all cursor-pointer shrink-0"
+                    className={cn(
+                      "h-11 px-2 rounded-xl border text-xs font-bold transition-all cursor-pointer shrink-0 shadow-sm",
+                      goldMode
+                        ? "bg-purple-500/10 hover:bg-purple-500/20 border-purple-500/30 text-purple-300"
+                        : "bg-purple-100 hover:bg-purple-200 border-purple-300 text-purple-800"
+                    )}
                     title="Añadir 1 palet de Noblejas"
                   >
                     +1p
@@ -355,7 +393,7 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
               </div>
 
               <div className="space-y-1">
-                <span className="text-[9px] uppercase font-bold text-purple-300/60 block">Cajas Sueltas</span>
+                <span className={cn("text-[9px] uppercase font-bold block", goldMode ? "text-purple-300/60" : "text-purple-700")}>Cajas Sueltas</span>
                 <div className="flex gap-1 items-center">
                   <input
                     type="number"
@@ -363,12 +401,22 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
                     value={noblejasCajas}
                     onChange={(e) => setNoblejasCajas(e.target.value)}
                     placeholder="0"
-                    className="w-full h-11 px-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-200 text-sm font-mono font-bold focus:outline-none focus:border-purple-400 transition-all"
+                    className={cn(
+                      "w-full h-11 px-2.5 rounded-xl border text-sm font-mono font-bold transition-all",
+                      goldMode
+                        ? "bg-purple-500/10 border-purple-500/20 text-purple-200"
+                        : "bg-white border-purple-300 text-purple-950 placeholder:text-purple-300"
+                    )}
                   />
                   <button
                     type="button"
                     onClick={handleResetNoblejas}
-                    className="h-11 px-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/40 hover:text-white text-xs font-bold transition-all cursor-pointer shrink-0"
+                    className={cn(
+                      "h-11 px-2 rounded-xl border text-xs font-bold transition-all cursor-pointer shrink-0 shadow-sm",
+                      goldMode
+                        ? "bg-white/5 hover:bg-white/10 border-white/10 text-white/40"
+                        : "bg-white hover:bg-slate-100 border-slate-300 text-slate-600"
+                    )}
                     title="Sin Noblejas (0)"
                   >
                     0
@@ -381,27 +429,30 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
 
         {/* Resumen del cálculo en vivo */}
         {numQuantity > 0 && (
-          <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between flex-wrap gap-2 text-xs">
+          <div className={cn(
+            "p-4 rounded-2xl border flex items-center justify-between flex-wrap gap-2 text-xs shadow-sm",
+            goldMode ? "bg-white/5 border-white/10" : "bg-emerald-50 border-emerald-600/20"
+          )}>
             <div className="flex items-center gap-3 flex-wrap">
-              <span className="font-bold text-white/70">
-                Milagro en {selectedLine}: <span className="font-mono text-emerald-400 font-black">{calc.pallets} palets + {calc.pico} cajas</span>
+              <span className={cn("font-bold", goldMode ? "text-white/70" : "text-slate-800")}>
+                Milagro en {selectedLine}: <span className="font-mono text-emerald-600 font-black">{calc.pallets} palets + {calc.pico} cajas</span>
               </span>
               {totalNoblejasBoxes > 0 && (
-                <span className="font-bold text-purple-300">
+                <span className="font-bold text-purple-700">
                   Noblejas: <span className="font-mono font-black">{numNobPallets} palets + {numNobCajas} cajas ({totalNoblejasBoxes} c)</span>
                 </span>
               )}
             </div>
-            <span className="text-[11px] text-white/40 font-mono">
+            <span className={cn("text-[11px] font-mono", goldMode ? "text-white/40" : "text-slate-600")}>
               Total Ensaladas: {totalSalads.toLocaleString()} u
             </span>
           </div>
         )}
 
-        {/* 5. Lote, Caducidad y Notas (Línea compacta responsive) */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+        {/* 5. Lote, Caducidad y Notas */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-white/50 uppercase tracking-wider block">
+            <label className={cn("text-[10px] font-bold uppercase tracking-wider block", goldMode ? "text-white/50" : "text-slate-700")}>
               Lote
             </label>
             <input
@@ -409,12 +460,17 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
               value={lote}
               onChange={(e) => setLote(e.target.value)}
               placeholder="Ej: L-2611A"
-              className="w-full h-10 px-3 rounded-xl bg-white/5 border border-white/10 text-white text-xs font-mono focus:outline-none focus:border-emerald-500 transition-all"
+              className={cn(
+                "w-full h-10 px-3 rounded-xl border text-xs font-mono transition-all",
+                goldMode
+                  ? "bg-white/5 border-white/10 text-white placeholder:text-white/30"
+                  : "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-emerald-600"
+              )}
             />
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-white/50 uppercase tracking-wider block">
+            <label className={cn("text-[10px] font-bold uppercase tracking-wider block", goldMode ? "text-white/50" : "text-slate-700")}>
               Caducidad
             </label>
             <input
@@ -422,12 +478,17 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
               value={fechaCaducidad}
               onChange={(e) => setFechaCaducidad(e.target.value)}
               placeholder="Ej: 24/08"
-              className="w-full h-10 px-3 rounded-xl bg-white/5 border border-white/10 text-white text-xs focus:outline-none focus:border-emerald-500 transition-all"
+              className={cn(
+                "w-full h-10 px-3 rounded-xl border text-xs transition-all",
+                goldMode
+                  ? "bg-white/5 border-white/10 text-white placeholder:text-white/30"
+                  : "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-emerald-600"
+              )}
             />
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-white/50 uppercase tracking-wider block">
+            <label className={cn("text-[10px] font-bold uppercase tracking-wider block", goldMode ? "text-white/50" : "text-slate-700")}>
               Nota / Alerta Operario
             </label>
             <input
@@ -435,31 +496,37 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="Ej: Control de peso..."
-              className="w-full h-10 px-3 rounded-xl bg-white/5 border border-white/10 text-white text-xs focus:outline-none focus:border-emerald-500 transition-all"
+              className={cn(
+                "w-full h-10 px-3 rounded-xl border text-xs transition-all",
+                goldMode
+                  ? "bg-white/5 border-white/10 text-white placeholder:text-white/30"
+                  : "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-emerald-600"
+              )}
             />
           </div>
         </div>
 
         {error && (
-          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold flex items-center gap-2 animate-fade-in">
+          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 text-xs font-bold flex items-center gap-2 animate-fade-in">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
         {/* Botón de Añadir a la Cola */}
-        <Button
+        <button
           type="submit"
           className={cn(
-            "w-full h-14 text-base font-black rounded-2xl shadow-xl transition-all active:scale-[0.99] cursor-pointer",
+            "w-full h-14 rounded-2xl font-black text-sm transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 shadow-xl",
             goldMode
-              ? "bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black shadow-amber-500/20"
-              : "bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-emerald-500/20"
+              ? "bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 text-black shadow-amber-500/25"
+              : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30"
           )}
+          id="add-to-queue-submit-btn"
         >
-          <Plus className="w-5 h-5 mr-1.5" />
+          <Plus className="w-5 h-5 stroke-[2.5]" />
           <span>Añadir a la {selectedLine}</span>
-        </Button>
+        </button>
       </form>
     </div>
   );

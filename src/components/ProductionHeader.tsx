@@ -165,40 +165,37 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
           {/* Fila Inferior (Mobile) / Fila Derecha (Desktop): Botones de control y Navegación */}
           <div className="flex items-center justify-between md:justify-end gap-2.5 w-full md:w-auto border-t border-black/5 dark:border-white/5 pt-1.5 md:border-t-0 md:pt-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              {/* Selector Rápido de Línea (K00, K01, K02, K03, Fábrica) */}
-              <div className="flex items-center bg-black/40 border border-white/10 rounded-lg p-0.5 shrink-0 gap-0.5">
-                {(["K00", "K01", "K02", "K03"] as const).map((code) => (
-                  <button
-                    key={code}
-                    onClick={() => setActiveLineCode(code)}
-                    className={cn(
-                      "px-1.5 py-0.5 rounded-md text-[10px] font-black transition-all cursor-pointer",
-                      activeLineCode === code
-                        ? goldMode 
-                          ? "bg-amber-500 text-black shadow-sm" 
-                          : "bg-emerald-500 text-white shadow-sm"
-                        : "text-white/40 hover:text-white hover:bg-white/5"
-                    )}
-                    title={`Cambiar a Línea ${code}`}
-                    type="button"
-                  >
-                    {code}
-                  </button>
-                ))}
-                <button
-                  onClick={() => setActiveLineCode("ALL")}
-                  className={cn(
-                    "px-1.5 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer flex items-center gap-0.5",
-                    activeLineCode === "ALL"
-                      ? "bg-purple-500 text-white shadow-sm"
-                      : "text-white/40 hover:text-white hover:bg-white/5"
-                  )}
-                  title="Ver Monitor Multilínea (Dashboard)"
-                  type="button"
-                >
-                  Dashboard
-                </button>
-              </div>
+              {/* Navegación limpia y espaciosa */}
+              {activeLineCode !== "ALL" && (
+                <div className={cn(
+                  "px-2.5 py-1 rounded-lg text-xs font-black border shadow-sm flex items-center gap-1",
+                  goldMode
+                    ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                    : "bg-emerald-600 text-white border-emerald-500"
+                )}>
+                  <span>📍</span>
+                  <span>Línea {activeLineCode}</span>
+                </div>
+              )}
+
+              <button
+                onClick={() => setActiveLineCode("ALL")}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1 shadow-sm border",
+                  activeLineCode === "ALL"
+                    ? goldMode
+                      ? "bg-amber-500 text-black border-amber-400"
+                      : "bg-emerald-600 text-white border-emerald-700"
+                    : goldMode
+                    ? "bg-white/5 border-white/10 text-white/70 hover:text-white hover:bg-white/10"
+                    : "bg-white border-slate-300 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800"
+                )}
+                title="Ver Monitor Multilínea (Dashboard)"
+                type="button"
+              >
+                <span>🏢</span>
+                <span>Dashboard</span>
+              </button>
 
               {/* Botón Selector de Tema (Florette / Premium) */}
               <button

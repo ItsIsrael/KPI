@@ -385,37 +385,36 @@ export default function Home() {
             </button>
           </div>
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-            {/* Selector Rápido de Línea (K00, K01, K02, K03, Fábrica) */}
-            <div className="flex items-center bg-black/40 border border-white/10 rounded-xl p-1 gap-1 shrink-0">
-              {(["K00", "K01", "K02", "K03"] as const).map((code) => (
-                <button
-                  key={code}
-                  onClick={() => setActiveLineCode(code)}
-                  className={cn(
-                    "px-2 py-1 rounded-lg text-xs font-black transition-all cursor-pointer",
-                    activeLineCode === code
-                      ? goldMode
-                        ? "bg-amber-500 text-black shadow-sm"
-                        : "bg-emerald-500 text-white shadow-sm"
-                      : "text-white/40 hover:text-white hover:bg-white/5"
-                  )}
-                  title={`Cambiar a Línea ${code}`}
-                  type="button"
-                >
-                  {code}
-                </button>
-              ))}
+            {/* Navegación limpia y espaciosa: Dashboard y Línea Activa */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {activeLineCode !== "ALL" && (
+                <div className={cn(
+                  "px-3 py-1.5 rounded-xl text-xs font-black border shadow-sm flex items-center gap-1.5",
+                  goldMode
+                    ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                    : "bg-emerald-600 text-white border-emerald-500"
+                )}>
+                  <span>📍</span>
+                  <span>Línea {activeLineCode}</span>
+                </div>
+              )}
+
               <button
                 onClick={() => setActiveLineCode("ALL")}
                 className={cn(
-                  "px-2 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1",
+                  "px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shadow-sm border",
                   activeLineCode === "ALL"
-                    ? "bg-purple-600 text-white shadow-sm"
-                    : "text-white/40 hover:text-white hover:bg-white/5"
+                    ? goldMode
+                      ? "bg-amber-500 text-black border-amber-400"
+                      : "bg-emerald-600 text-white border-emerald-700"
+                    : goldMode
+                    ? "bg-white/5 border-white/10 text-white/70 hover:text-white hover:bg-white/10"
+                    : "bg-white border-slate-300 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800"
                 )}
                 title="Ver Monitor Multilínea (Dashboard)"
                 type="button"
               >
+                <span>🏢</span>
                 <span>Dashboard</span>
               </button>
             </div>
