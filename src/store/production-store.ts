@@ -112,6 +112,14 @@ interface ProductionState {
   // Multilínea
   activeLineCode: string; // 'K00' | 'K01' | 'K02' | 'K03' | 'ALL'
   activeLineId: string | null;
+  lineStorage: Record<string, {
+    salads: Salad[];
+    queue: QueueItem[];
+    currentQueueIndex: number;
+    currentProgress: FormatProgress | null;
+    queueProgress: Record<string, FormatProgress>;
+    isProducing: boolean;
+  }>;
   setActiveLineCode: (code: string) => Promise<void>;
   loadActiveLineData: () => Promise<void>;
 
@@ -147,7 +155,7 @@ interface ProductionState {
   toggleScreenLock: () => void;
 
   // ===== ACCIONES: ENSALADAS =====
-  addSalad: (salad: Salad) => void;
+  addSalad: (salad: Salad, targetLineCode?: string) => void;
   removeSalad: (id: string) => void;
   updateSalad: (id: string, salad: Partial<Salad>) => void;
 
@@ -230,10 +238,51 @@ export const useProductionStore = create<ProductionState>()(
       // Multilínea
       activeLineCode: "K00",
       activeLineId: null,
+      lineStorage: {},
 
       setActiveLineCode: async (code: string) => {
+        const prevCode = get().activeLineCode;
+        if (prevCode && prevCode !== "ALL") {
+          // Guardar snapshot de la línea actual en memoria local
+          const currentSnapshot = {
+            salads: get().salads,
+            queue: get().queue,
+            currentQueueIndex: get().currentQueueIndex,
+            currentProgress: get().currentProgress,
+            queueProgress: get().queueProgress,
+            isProducing: get().isProducing,
+          };
+          set((s) => ({
+            lineStorage: { ...s.lineStorage, [prevCode]: currentSnapshot },
+          }));
+        }
+
         set({ activeLineCode: code });
         if (code === "ALL") return;
+
+        // Restaurar inmediatamente el estado de la línea seleccionada (0ms de latencia)
+        const saved = get().lineStorage[code];
+        if (saved) {
+          set({
+            salads: saved.salads || [],
+            queue: saved.queue || [],
+            currentQueueIndex: saved.currentQueueIndex || 0,
+            currentProgress: saved.currentProgress || null,
+            queueProgress: saved.queueProgress || {},
+            isProducing: saved.isProducing || false,
+          });
+        } else {
+          set({
+            salads: [],
+            queue: [],
+            currentQueueIndex: 0,
+            currentProgress: null,
+            queueProgress: {},
+            isProducing: false,
+          });
+        }
+
+        // Sincronizar con la base de datos de Supabase
         await get().loadActiveLineData();
       },
 
@@ -252,14 +301,59 @@ export const useProductionStore = create<ProductionState>()(
               const prog = currentQueueItem
                 ? data.queueProgress[currentQueueItem.id] || createInitialProgress(currentQueueItem.id)
                 : null;
-              
-              set({
+
+              // Reconstruir lista de ensaladas a partir de la cola de esta línea
+              const saladMap = new Map<string, Salad>();
+              data.queue.forEach((q) => {
+                if (!saladMap.has(q.saladId)) {
+                  saladMap.set(q.saladId, {
+                    id: q.saladId,
+                    name: q.saladName,
+                    formats: [],
+                  });
+                }
+                saladMap.get(q.saladId)!.formats.push({
+                  id: q.formatId,
+                  boxType: q.boxType,
+                  quantity: q.quantity,
+                  noblejas: q.noblejas,
+                  boxesPerPallet: q.boxesPerPallet,
+                  note: q.note,
+                  lote: q.lote,
+                  cambioLote: q.cambioLote,
+                  fechaCaducidad: q.fechaCaducidad,
+                  linea: q.linea,
+                });
+              });
+              const reconstructedSalads = Array.from(saladMap.values());
+
+              const lineState = {
                 queue: data.queue,
+                salads: reconstructedSalads,
                 queueProgress: data.queueProgress,
                 currentQueueIndex: data.currentQueueIndex,
                 isProducing: data.isProducing,
                 currentProgress: prog,
-              });
+              };
+
+              set((s) => ({
+                ...lineState,
+                lineStorage: { ...s.lineStorage, [activeLineCode]: lineState },
+              }));
+            } else {
+              // La línea no tiene órdenes en base de datos
+              const emptyState = {
+                queue: [],
+                salads: [],
+                queueProgress: {},
+                currentQueueIndex: 0,
+                isProducing: false,
+                currentProgress: null,
+              };
+              set((s) => ({
+                ...emptyState,
+                lineStorage: { ...s.lineStorage, [activeLineCode]: emptyState },
+              }));
             }
           }
         } catch (e) {
@@ -296,32 +390,66 @@ export const useProductionStore = create<ProductionState>()(
 
       // ===== ENSALADAS =====
 
-      addSalad: (salad) =>
-        set((state) => {
-          const newQueueItems: QueueItem[] = salad.formats.map((format) => ({
-            id: generateId(),
-            saladId: salad.id,
-            saladName: salad.name,
-            formatId: format.id,
-            boxType: format.boxType,
-            quantity: format.quantity,
-            noblejas: format.noblejas,
-            boxesPerPallet: format.boxesPerPallet,
-            note: format.note,
-            lote: format.lote,
-            cambioLote: format.cambioLote,
-            fechaCaducidad: format.fechaCaducidad,
-            linea: format.linea,
-          }));
+      addSalad: async (salad, targetLineCode) => {
+        const state = get();
+        const lineCodeToUse = targetLineCode || state.activeLineCode;
+
+        // Obtener ID de la línea si no está cargado
+        let lineIdToUse = state.activeLineId;
+        if (targetLineCode && targetLineCode !== state.activeLineCode) {
+          const lines = await getProductionLines();
+          const targetLine = lines.find((l) => l.code === targetLineCode);
+          if (targetLine) lineIdToUse = targetLine.id;
+        }
+
+        const newQueueItems: QueueItem[] = salad.formats.map((format) => ({
+          id: generateId(),
+          saladId: salad.id,
+          saladName: salad.name,
+          formatId: format.id,
+          boxType: format.boxType,
+          quantity: format.quantity,
+          noblejas: format.noblejas,
+          boxesPerPallet: format.boxesPerPallet,
+          note: format.note,
+          lote: format.lote,
+          cambioLote: format.cambioLote,
+          fechaCaducidad: format.fechaCaducidad,
+          linea: lineCodeToUse,
+        }));
+
+        if (lineCodeToUse === state.activeLineCode) {
           const updatedQueue = [...state.queue, ...newQueueItems];
-          if (state.activeLineId) {
-            syncQueueItems(state.activeLineId, updatedQueue);
+          const updatedSalads = [...state.salads, salad];
+          if (lineIdToUse) {
+            syncQueueItems(lineIdToUse, updatedQueue);
           }
-          return {
-            salads: [...state.salads, salad],
+          broadcastLocalChange(lineCodeToUse);
+          set((s) => ({
+            salads: updatedSalads,
             queue: updatedQueue,
-          };
-        }),
+            lineStorage: {
+              ...s.lineStorage,
+              [lineCodeToUse]: {
+                salads: updatedSalads,
+                queue: updatedQueue,
+                currentQueueIndex: s.currentQueueIndex,
+                currentProgress: s.currentProgress,
+                queueProgress: s.queueProgress,
+                isProducing: s.isProducing,
+              },
+            },
+          }));
+        } else {
+          // Guardar en la línea objetivo
+          if (lineIdToUse) {
+            const data = await fetchLineData(lineIdToUse);
+            const targetQueue = [...data.queue, ...newQueueItems];
+            syncQueueItems(lineIdToUse, targetQueue);
+          }
+          broadcastLocalChange(lineCodeToUse);
+        }
+      },
 
       removeSalad: (id) =>
         set((state) => ({

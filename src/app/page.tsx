@@ -511,11 +511,11 @@ export default function Home() {
           </Button>
         </div>
 
-        {/* Lista de ensaladas (SIN FOTO) */}
+        {/* Lista de ensaladas */}
         {salads.length > 0 && (
           <section className="space-y-3">
             <h2 className="text-xs font-semibold text-white/30 uppercase tracking-wider">
-              🥗 Ensaladas ({salads.length})
+              Ensaladas en {activeLineCode} ({salads.length})
             </h2>
 
             {salads.map((salad) => {

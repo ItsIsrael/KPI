@@ -405,7 +405,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                   </span>
                   <div>
                     <h3 className="text-base sm:text-lg font-black text-white group-hover:text-emerald-400 transition-colors">
-                      {item.line.name}
+                      Línea {item.line.code}
                     </h3>
                     <p className="text-[11px] text-white/40 font-mono">
                       {item.queueLength} formatos ({item.pendingCount} en cola)

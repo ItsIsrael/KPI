@@ -170,10 +170,10 @@ export interface ProductionLine {
 }
 
 export const DEFAULT_PRODUCTION_LINES: Array<{ code: string; name: string }> = [
-  { code: "K00", name: "Línea K00 - Envasado Principal" },
-  { code: "K01", name: "Línea K01 - Envasado Secundario" },
-  { code: "K02", name: "Línea K02 - Bowls y Especialidades" },
-  { code: "K03", name: "Línea K03 - Formatos Familiares" },
+  { code: "K00", name: "Línea K00" },
+  { code: "K01", name: "Línea K01" },
+  { code: "K02", name: "Línea K02" },
+  { code: "K03", name: "Línea K03" },
 ];
 
 export interface LineOverview {
