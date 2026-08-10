@@ -654,7 +654,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                                     : "bg-slate-100 border-slate-200 text-slate-400"
                                 )}
                               >
-                                {isDone ? `P${pIdx + 1} OK` : `P${pIdx + 1}`}
+                                {isDone ? `📦 P${pIdx + 1} ✓` : `📦 P${pIdx + 1}`}
                               </div>
                             );
                           })}
@@ -692,7 +692,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                                       : "bg-slate-100 border-slate-200 text-slate-400"
                                   )}
                                 >
-                                  {isDone ? `Nob${nIdx + 1} OK` : `Nob${nIdx + 1}`}
+                                  {isDone ? `📦 Nob${nIdx + 1} ✓` : `📦 Nob${nIdx + 1}`}
                                 </div>
                               );
                             })}

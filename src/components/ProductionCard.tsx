@@ -632,7 +632,16 @@ export function ProductionCard() {
                         title={isActive ? "Haz clic para completar este palet" : isDone && i === noblejaspalletsDone - 1 ? "Haz clic para deshacer este palet" : ""}
                       >
                         <span className="text-[9px] uppercase tracking-wider font-semibold opacity-65">Nob {i + 1}</span>
-                        <span className="text-[10px] font-bold font-mono">{isDone ? "COMPLETO" : "PENDIENTE"}</span>
+                        <span className="text-[11px] font-bold font-mono flex items-center gap-1">
+                          {isDone ? (
+                            <>
+                              <span>📦</span>
+                              <span className="text-purple-300 font-black">✓</span>
+                            </>
+                          ) : (
+                            <span>📦</span>
+                          )}
+                        </span>
                         <span className="text-[8px] opacity-40 font-mono">{(current.boxesPerPallet * saladsPerBox)} u</span>
                       </button>
                     );
@@ -810,7 +819,16 @@ export function ProductionCard() {
                         title={isActive ? "Haz clic para completar este palet" : isDone && i === currentProgress.completedPallets - 1 ? "Haz clic para deshacer este palet" : ""}
                       >
                         <span className="text-[9px] uppercase tracking-wider font-semibold opacity-65">Palet {i + 1}</span>
-                        <span className="text-[10px] font-bold font-mono">{isDone ? "COMPLETO" : "PENDIENTE"}</span>
+                        <span className="text-[11px] font-bold font-mono flex items-center gap-1">
+                          {isDone ? (
+                            <>
+                              <span>📦</span>
+                              <span className="text-orange-300 font-black">✓</span>
+                            </>
+                          ) : (
+                            <span>📦</span>
+                          )}
+                        </span>
                         <span className="text-[8px] opacity-40 font-mono">{(current.boxesPerPallet * saladsPerBox)} u</span>
                       </button>
                     );
