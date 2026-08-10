@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#0a1a14"/>
+      <stop offset="100%" stop-color="#05050a"/>
+    </radialGradient>
+    <linearGradient id="glow1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="50%" stop-color="#06d6a0"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+    <linearGradient id="glow2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="50%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#34d399"/>
+    </linearGradient>
+    <filter id="neon">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="outerGlow">
+      <feGaussianBlur stdDeviation="16" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  
+  <!-- Outer ring glow -->
+  <circle cx="256" cy="256" r="200" fill="none" stroke="#10b981" stroke-width="3" opacity="0.3" filter="url(#outerGlow)"/>
+  <circle cx="256" cy="256" r="200" fill="none" stroke="url(#glow1)" stroke-width="4" opacity="0.6"/>
+  
+  <!-- Inner ring -->
+  <circle cx="256" cy="256" r="170" fill="none" stroke="#10b981" stroke-width="2" opacity="0.15"/>
+  
+  <!-- Flow arrows - intertwined -->
+  <g filter="url(#neon)" transform="translate(256,256)">
+    <!-- Arrow 1: top-left to bottom-right -->
+    <path d="M-80,-60 C-40,-60 0,-30 40,0 C80,30 90,50 60,60" 
+          fill="none" stroke="url(#glow1)" stroke-width="22" stroke-linecap="round"/>
+    <!-- Arrowhead 1 -->
+    <polygon points="55,40 80,65 45,70" fill="url(#glow1)"/>
+    
+    <!-- Arrow 2: bottom-right to top-left -->
+    <path d="M80,60 C40,60 0,30 -40,0 C-80,-30 -90,-50 -60,-60" 
+          fill="none" stroke="url(#glow2)" stroke-width="22" stroke-linecap="round"/>
+    <!-- Arrowhead 2 -->
+    <polygon points="-55,-40 -80,-65 -45,-70" fill="url(#glow2)"/>
+  </g>
+  
+  <!-- Center dot -->
+  <circle cx="256" cy="256" r="8" fill="#10b981" opacity="0.8" filter="url(#neon)"/>
+</svg>
