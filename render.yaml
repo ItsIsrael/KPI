@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: liar-kpi
+    name: lia-kpi
     runtime: node
     plan: free
     region: frankfurt

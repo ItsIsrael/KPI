@@ -861,7 +861,7 @@ export default function Home() {
                   </div>
                   <div>
                     <h1 className="text-base sm:text-lg font-black text-white leading-tight">
-                      L.I.A.R KPI · Dashboard de Producción
+                      L.I.A KPI · Dashboard de Producción
                     </h1>
                     <p className="text-[10px] text-white/50">Visión simultánea de todas las líneas en planta</p>
                   </div>

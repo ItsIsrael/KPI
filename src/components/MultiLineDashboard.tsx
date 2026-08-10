@@ -733,7 +733,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                       <span>Línea {item.line.code}</span>
                     </h3>
                     <p className={cn("text-[11px] font-mono", goldMode ? "text-white/40" : "text-[#64748b]")}>
-                      📋 {item.queueLength} formatos ({item.pendingCount} en cola)
+                      📋 {item.queueLength} {item.queueLength === 1 ? "formato" : "formatos"} ({item.pendingCount} en cola)
                     </p>
                   </div>
                 </div>
