@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: liar-kpi
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: prod
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        value: https://tsoenhuppyevmayyudui.supabase.co
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzb2VuaHVwcHlldm1heXl1ZHVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzMTQ5NzcsImV4cCI6MjEwMTg5MDk3N30.SylLuiKrvi39l5g2JoX_vZLsm1M9l5mXsCQjRM9y5cw
