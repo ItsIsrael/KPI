@@ -229,12 +229,20 @@ export async function syncQueueItems(lineId: string, queue: QueueItem[]) {
   if (!isSupabaseConfigured || !supabase || lineId.startsWith("local-")) return;
 
   try {
-    // Borrar cola anterior de esta línea y reinsertar
-    await supabase.from("line_queue_items").delete().eq("line_id", lineId);
+    const queueIds = queue.map((q) => q.id);
+    if (queueIds.length > 0) {
+      await supabase
+        .from("line_queue_items")
+        .delete()
+        .eq("line_id", lineId)
+        .not("id", "in", `(${queueIds.join(",")})`);
+    } else {
+      await supabase.from("line_queue_items").delete().eq("line_id", lineId);
+    }
 
     if (queue.length > 0) {
       const rows = queue.map((item, index) => ({
-        id: item.id.length === 36 ? item.id : undefined, // Preservar si es UUID
+        id: item.id,
         line_id: lineId,
         order_index: index,
         salad_id: item.saladId,
@@ -248,9 +256,10 @@ export async function syncQueueItems(lineId: string, queue: QueueItem[]) {
         lote: item.lote || null,
         cambio_lote: item.cambioLote || false,
         fecha_caducidad: item.fechaCaducidad || null,
+        updated_at: new Date().toISOString(),
       }));
 
-      await supabase.from("line_queue_items").insert(rows);
+      await supabase.from("line_queue_items").upsert(rows, { onConflict: "id" });
     }
   } catch (e) {
     console.error("Error en syncQueueItems:", e);

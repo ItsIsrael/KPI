@@ -421,31 +421,67 @@ export const useProductionStore = create<ProductionState>()(
         if (lineCodeToUse === state.activeLineCode) {
           const updatedQueue = [...state.queue, ...newQueueItems];
           const updatedSalads = [...state.salads, salad];
-          if (lineIdToUse) {
-            syncQueueItems(lineIdToUse, updatedQueue);
+
+          // Iniciar producción automáticamente directamente al crear
+          const isNewStart = !state.isProducing || state.queue.length === 0 || !state.currentProgress;
+          const currentQueueIndex = isNewStart ? 0 : state.currentQueueIndex;
+          const currentItem = updatedQueue[currentQueueIndex] || updatedQueue[0];
+
+          const updatedQueueProgress: Record<string, FormatProgress> = { ...(state.queueProgress || {}) };
+          newQueueItems.forEach((item) => {
+            if (!updatedQueueProgress[item.id]) {
+              updatedQueueProgress[item.id] = createInitialProgress(item.id);
+            }
+          });
+
+          const currentProgress = currentItem
+            ? updatedQueueProgress[currentItem.id] || createInitialProgress(currentItem.id)
+            : null;
+
+          if (currentProgress && currentItem) {
+            updatedQueueProgress[currentItem.id] = currentProgress;
           }
-          broadcastLocalChange(lineCodeToUse);
-          set((s) => ({
+
+          const lineState = {
             salads: updatedSalads,
             queue: updatedQueue,
+            currentQueueIndex,
+            currentProgress,
+            queueProgress: updatedQueueProgress,
+            isProducing: true,
+            formatStartTime: state.formatStartTime || Date.now(),
+          };
+
+          set((s) => ({
+            ...lineState,
             lineStorage: {
               ...s.lineStorage,
-              [lineCodeToUse]: {
-                salads: updatedSalads,
-                queue: updatedQueue,
-                currentQueueIndex: s.currentQueueIndex,
-                currentProgress: s.currentProgress,
-                queueProgress: s.queueProgress,
-                isProducing: s.isProducing,
-              },
+              [lineCodeToUse]: lineState,
             },
           }));
+
+          // Sincronización completa con Supabase
+          if (lineIdToUse) {
+            await syncQueueItems(lineIdToUse, updatedQueue);
+            await syncLineState(lineIdToUse, true, currentQueueIndex);
+            if (currentProgress && currentItem) {
+              await syncProgress(currentItem.id, currentProgress);
+            }
+          }
+          broadcastLocalChange(lineCodeToUse);
         } else {
           // Guardar en la línea objetivo
           if (lineIdToUse) {
             const data = await fetchLineData(lineIdToUse);
             const targetQueue = [...data.queue, ...newQueueItems];
-            syncQueueItems(lineIdToUse, targetQueue);
+            await syncQueueItems(lineIdToUse, targetQueue);
+            if (!data.isProducing || data.queue.length === 0) {
+              await syncLineState(lineIdToUse, true, 0);
+              const firstItem = targetQueue[0];
+              if (firstItem) {
+                await syncProgress(firstItem.id, createInitialProgress(firstItem.id));
+              }
+            }
           }
           broadcastLocalChange(lineCodeToUse);
         }
