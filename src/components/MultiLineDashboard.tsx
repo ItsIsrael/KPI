@@ -20,7 +20,8 @@ import {
   ChevronRight,
   Layers,
   CheckCircle2,
-  Trophy
+  Trophy,
+  Zap
 } from "lucide-react";
 
 interface MultiLineDashboardProps {
@@ -33,7 +34,8 @@ type ViewMode = "ALL" | "PAIR_01" | "PAIR_23" | "CUSTOM";
 export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboardProps) {
   const [overview, setOverview] = useState<LineOverview[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<ViewMode>("PAIR_01"); // Por defecto enfocamos en la pareja K00 & K01
+  // Por defecto mostramos las 4 líneas si no se especifica otra vista
+  const [viewMode, setViewMode] = useState<ViewMode>("ALL");
   const [customSelectedLines, setCustomSelectedLines] = useState<string[]>(["K00", "K01"]);
   const [connectionTest, setConnectionTest] = useState<SupabaseTestResult | null>(null);
   const [isTestingConn, setIsTestingConn] = useState(false);
@@ -70,7 +72,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
             const noblejasBoxes = currentItem.noblejas;
             const totalPallets = calc.pallets;
             const completedPallets = prog.completedPallets;
-            const noblejasDoneBoxes = (prog.noblejasCompletedPallets || 0) * currentItem.boxesPerPallet;
+            const noblejasDoneBoxes = (prog.noblejasCompletedPallets || 0) * currentItem.boxesPerPallet + (prog.nobjelasPicoCompleted ? (noblejasBoxes % currentItem.boxesPerPallet) : 0);
             const milagroDoneBoxes = completedPallets * currentItem.boxesPerPallet + (prog.picoCompleted ? calc.pico : 0);
             const completedBoxes = noblejasDoneBoxes + milagroDoneBoxes;
 
@@ -128,8 +130,8 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
     return () => clearInterval(interval);
   }, []);
 
-  // Quick Action: Añadir Palet Milagro directamente desde el Dashboard (Persistente y sin parpadeos)
-  const handleQuickAddMilagroPallet = async (item: LineOverview, e: React.MouseEvent) => {
+  // Quick Action Dinámica Milagro: Avanza Palet o Pico según corresponda
+  const handleQuickMilagroAction = async (item: LineOverview, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!item.currentItem || !item.calc) return;
     const prog: FormatProgress = item.progress || {
@@ -142,14 +144,31 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
       finished: false,
       boxesAdjustment: 0,
     };
-    if (prog.completedPallets >= item.calc.pallets) return;
 
-    setActionLoadingId(`${item.line.id}-pal`);
-    const nextPallets = prog.completedPallets + 1;
-    const isFinished = nextPallets >= item.calc.pallets && (item.calc.pico === 0 || prog.picoCompleted);
+    const hasPalletsLeft = prog.completedPallets < item.calc.pallets;
+    const hasPicoLeft = item.calc.pico > 0 && !prog.picoCompleted;
+
+    if (!hasPalletsLeft && !hasPicoLeft) return;
+
+    setActionLoadingId(`${item.line.id}-mil`);
+
+    let nextPallets = prog.completedPallets;
+    let nextPicoDone = prog.picoCompleted;
+    let addedBoxes = 0;
+
+    if (hasPalletsLeft) {
+      nextPallets = prog.completedPallets + 1;
+      addedBoxes = item.currentItem.boxesPerPallet;
+    } else if (hasPicoLeft) {
+      nextPicoDone = true;
+      addedBoxes = item.calc.pico;
+    }
+
+    const isFinished = nextPallets >= item.calc.pallets && (item.calc.pico === 0 || nextPicoDone);
     const updatedProg: FormatProgress = {
       ...prog,
       completedPallets: nextPallets,
+      picoCompleted: nextPicoDone,
       finished: isFinished,
       palletLastUpdated: Date.now(),
     };
@@ -161,7 +180,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
     setOverview((prev) =>
       prev.map((o) => {
         if (o.line.id !== item.line.id) return o;
-        const newDone = o.completedBoxes + item.currentItem!.boxesPerPallet;
+        const newDone = o.completedBoxes + addedBoxes;
         return {
           ...o,
           completedBoxes: newDone,
@@ -177,8 +196,8 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
     setActionLoadingId(null);
   };
 
-  // Quick Action: Añadir Palet Noblejas directamente desde el Dashboard (Persistente)
-  const handleQuickAddNoblejasPallet = async (item: LineOverview, e: React.MouseEvent) => {
+  // Quick Action Dinámica Noblejas: Avanza Palet o Pico de Noblejas
+  const handleQuickNoblejasAction = async (item: LineOverview, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!item.currentItem || item.noblejasBoxes <= 0) return;
     const prog: FormatProgress = item.progress || {
@@ -191,16 +210,35 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
       finished: false,
       boxesAdjustment: 0,
     };
+
     const maxNobPallets = Math.floor(item.noblejasBoxes / item.currentItem.boxesPerPallet);
-    if (prog.noblejasCompletedPallets >= maxNobPallets) return;
+    const nobPicoCajas = item.noblejasBoxes % item.currentItem.boxesPerPallet;
+
+    const hasNobPalletsLeft = prog.noblejasCompletedPallets < maxNobPallets;
+    const hasNobPicoLeft = nobPicoCajas > 0 && !prog.nobjelasPicoCompleted;
+
+    if (!hasNobPalletsLeft && !hasNobPicoLeft) return;
 
     setActionLoadingId(`${item.line.id}-nob`);
-    const nextNobPallets = prog.noblejasCompletedPallets + 1;
-    const isNobDone = nextNobPallets >= maxNobPallets;
+
+    let nextNobPallets = prog.noblejasCompletedPallets;
+    let nextNobPicoDone = prog.nobjelasPicoCompleted;
+    let addedBoxes = 0;
+
+    if (hasNobPalletsLeft) {
+      nextNobPallets = prog.noblejasCompletedPallets + 1;
+      addedBoxes = item.currentItem.boxesPerPallet;
+    } else if (hasNobPicoLeft) {
+      nextNobPicoDone = true;
+      addedBoxes = nobPicoCajas;
+    }
+
+    const isNobDone = nextNobPallets >= maxNobPallets && (nobPicoCajas === 0 || nextNobPicoDone);
     const updatedProg: FormatProgress = {
       ...prog,
       noblejasCompleted: isNobDone,
       noblejasCompletedPallets: nextNobPallets,
+      nobjelasPicoCompleted: nextNobPicoDone,
       palletLastUpdated: Date.now(),
     };
 
@@ -211,11 +249,11 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
     setOverview((prev) =>
       prev.map((o) => {
         if (o.line.id !== item.line.id) return o;
-        const newDone = o.completedBoxes + item.currentItem!.boxesPerPallet;
+        const newDone = o.completedBoxes + addedBoxes;
         return {
           ...o,
           completedBoxes: newDone,
-          noblejasDoneBoxes: o.noblejasDoneBoxes + item.currentItem!.boxesPerPallet,
+          noblejasDoneBoxes: o.noblejasDoneBoxes + addedBoxes,
           percent: Math.min(Math.round((newDone / o.totalBoxes) * 100), 100),
           progress: updatedProg,
         };
@@ -277,7 +315,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                   : "bg-emerald-600/10 text-emerald-700 border-emerald-600/30"
               )}>
                 <span>🏢</span>
-                <span>🌿 Sala de Control y Monitorización Dual</span>
+                <span>🌿 Sala de Control y Monitorización</span>
               </span>
 
               {/* Indicador de Supabase Realtime */}
@@ -307,11 +345,11 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
 
             <h2 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight flex items-center gap-2 mt-0.5">
               <span className={goldMode ? "text-gold-gradient" : "text-[#0f291e]"}>
-                {viewMode === "PAIR_01" ? "🌱 Supervisión de Líneas K00 & K01" : viewMode === "PAIR_23" ? "🌱 Supervisión de Líneas K02 & K03" : "🌿 Monitor Multilínea en Tiempo Real"}
+                {viewMode === "PAIR_01" ? "🌱 Supervisión de Líneas K00 & K01" : viewMode === "PAIR_23" ? "🌱 Supervisión de Líneas K02 & K03" : "🌿 Monitor General de Planta (4 Líneas)"}
               </span>
             </h2>
             <p className={cn("text-xs", goldMode ? "text-white/50" : "text-[#475569]")}>
-              Control simultáneo, avance de palets y seguimiento de lotes en directo
+              Control simultáneo, avance de palets, picos y seguimiento de lotes en directo
             </p>
           </div>
 
@@ -366,7 +404,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           </div>
         </div>
 
-        {/* Barra de Filtros: Parejas vs Todas */}
+        {/* Barra de Filtros: Todas vs Parejas */}
         <div className={cn(
           "pt-3.5 border-t flex items-center justify-between flex-wrap gap-2.5",
           goldMode ? "border-white/10" : "border-emerald-600/10"
@@ -378,6 +416,20 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
             )}>
               Modo de Visualización:
             </span>
+            <button
+              onClick={() => setViewMode("ALL")}
+              className={cn(
+                "px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-sm",
+                viewMode === "ALL"
+                  ? goldMode ? "bg-amber-500 text-black font-black" : "bg-emerald-600 text-white font-black"
+                  : goldMode
+                  ? "bg-white/5 text-white/60 hover:text-white hover:bg-white/10 border border-white/5"
+                  : "bg-white text-[#334155] hover:bg-emerald-50 border border-emerald-600/15"
+              )}
+              type="button"
+            >
+              Todas las 4 Líneas
+            </button>
             <button
               onClick={() => setViewMode("PAIR_01")}
               className={cn(
@@ -405,20 +457,6 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
               type="button"
             >
               Dúo K02 & K03 (Detallado)
-            </button>
-            <button
-              onClick={() => setViewMode("ALL")}
-              className={cn(
-                "px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-sm",
-                viewMode === "ALL"
-                  ? goldMode ? "bg-amber-500 text-black font-black" : "bg-emerald-600 text-white font-black"
-                  : goldMode
-                  ? "bg-white/5 text-white/60 hover:text-white hover:bg-white/10 border border-white/5"
-                  : "bg-white text-[#334155] hover:bg-emerald-50 border border-emerald-600/15"
-              )}
-              type="button"
-            >
-              Todas las 4 Líneas
             </button>
             <button
               onClick={() => setViewMode("CUSTOM")}
@@ -474,7 +512,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
         </div>
       </div>
 
-      {/* Grid de Líneas de Producción (Alta Densidad en Modo Dúo) */}
+      {/* Grid de Líneas de Producción (Alta Densidad y Detalle Dinámico) */}
       <div className={cn(
         "grid gap-5",
         isDuoView ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-2"
@@ -492,13 +530,25 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
             finished: false,
             boxesAdjustment: 0,
           };
+
           const totalMilagroPallets = calc ? calc.pallets : item.totalPallets;
+          const milagroPicoCajas = calc ? calc.pico : 0;
           const maxNobPallets = currentItem && item.noblejasBoxes > 0 ? Math.floor(item.noblejasBoxes / currentItem.boxesPerPallet) : 0;
+          const nobjelasPicoCajas = currentItem && item.noblejasBoxes > 0 ? (item.noblejasBoxes % currentItem.boxesPerPallet) : 0;
 
           // Estado dinámico automático: detecta finalizado, en marcha o en espera
           const hasActiveOrders = item.queueLength > 0 && !!item.currentSaladName;
           const isFinished = hasActiveOrders && (item.percent >= 100 || prog.finished);
           const isProducing = item.line.isProducing && hasActiveOrders && !isFinished;
+
+          // Flags dinámicos para botones de acción rápida
+          const hasMilagroPalletsLeft = prog.completedPallets < totalMilagroPallets;
+          const hasMilagroPicoLeft = milagroPicoCajas > 0 && !prog.picoCompleted;
+          const isMilagroDone = !hasMilagroPalletsLeft && !hasMilagroPicoLeft;
+
+          const hasNobPalletsLeft = maxNobPallets > 0 && prog.noblejasCompletedPallets < maxNobPallets;
+          const hasNobPicoLeft = nobjelasPicoCajas > 0 && !prog.nobjelasPicoCompleted;
+          const isNobDone = item.noblejasBoxes > 0 && !hasNobPalletsLeft && !hasNobPicoLeft;
 
           return (
             <div
@@ -627,6 +677,16 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                           <span className={cn("text-xs font-mono font-bold", goldMode ? "text-white/70" : "text-[#334155]")}>
                             {item.totalBoxes} cajas totales
                           </span>
+                          {milagroPicoCajas > 0 && (
+                            <span className={cn("text-[11px] font-mono px-2 py-0.5 rounded-lg border", goldMode ? "bg-amber-500/10 border-amber-500/20 text-amber-300" : "bg-emerald-50 border-emerald-200 text-emerald-700")}>
+                              Pico Milagro: {milagroPicoCajas}c
+                            </span>
+                          )}
+                          {item.currentItem?.fechaCaducidad && (
+                            <span className={cn("text-[11px] font-mono px-2 py-0.5 rounded-lg border", goldMode ? "bg-white/5 border-white/10 text-white/60" : "bg-slate-50 border-slate-200 text-slate-600")}>
+                              Cad: {item.currentItem.fechaCaducidad}
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -649,6 +709,9 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                       <div className="flex justify-between text-xs font-bold">
                         <span className={goldMode ? "text-white/80" : "text-[#334155]"}>
                           📦 {item.completedBoxes} de {item.totalBoxes} cajas ({item.completedPallets} / {item.totalPallets} palets)
+                          {item.totalBoxes - item.completedBoxes > 0 && (
+                            <span className="opacity-60 ml-1">({item.totalBoxes - item.completedBoxes} restantes)</span>
+                          )}
                         </span>
                         <span className={cn("font-mono font-black text-sm", isFinished ? "text-emerald-500 text-base animate-pulse" : "text-emerald-600")}>
                           {item.percent}%
@@ -670,12 +733,20 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                       </div>
                     </div>
 
-                    {/* Matriz Visual de Palets en Vivo (En Modo Dúo) */}
-                    {isDuoView && totalMilagroPallets > 0 && (
+                    {/* Matriz Visual de Palets en Vivo (Incluye Celda de Pico) */}
+                    {(isDuoView || totalMilagroPallets > 0) && (
                       <div className={cn("pt-2 border-t space-y-1.5", goldMode ? "border-white/5" : "border-emerald-600/10")}>
-                        <p className={cn("text-[10px] font-black uppercase tracking-wider", goldMode ? "text-white/40" : "text-[#64748b]")}>
-                          🪵 MATRIZ DE PALETS MILAGRO ({prog.completedPallets}/{totalMilagroPallets})
-                        </p>
+                        <div className="flex items-center justify-between text-xs">
+                          <p className={cn("text-[10px] font-black uppercase tracking-wider", goldMode ? "text-white/40" : "text-[#64748b]")}>
+                            🪵 MATRIZ DE PALETS MILAGRO ({prog.completedPallets}/{totalMilagroPallets})
+                          </p>
+                          {milagroPicoCajas > 0 && (
+                            <span className={cn("text-[10px] font-bold font-mono", prog.picoCompleted ? "text-emerald-500 font-black" : (goldMode ? "text-amber-400" : "text-emerald-700"))}>
+                              {prog.picoCompleted ? "✓ Pico Completado" : `Pico: ${milagroPicoCajas} cajas`}
+                            </span>
+                          )}
+                        </div>
+
                         <div className="flex flex-wrap gap-1.5">
                           {Array.from({ length: totalMilagroPallets }).map((_, pIdx) => {
                             const isDone = pIdx < prog.completedPallets;
@@ -702,11 +773,33 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                               </div>
                             );
                           })}
+
+                          {/* Celda visual de Pico Milagro */}
+                          {milagroPicoCajas > 0 && (
+                            <div
+                              className={cn(
+                                "h-8 px-2.5 rounded-lg border flex items-center justify-center text-[10px] font-mono font-bold transition-all",
+                                prog.picoCompleted
+                                  ? goldMode
+                                    ? "bg-emerald-500/25 border-emerald-400 text-emerald-300 font-black shadow-sm"
+                                    : "bg-emerald-200 border-emerald-500 text-emerald-900 font-black"
+                                  : !hasMilagroPalletsLeft
+                                  ? goldMode
+                                    ? "bg-amber-500/20 border-amber-400 border-dashed text-amber-300 animate-pulse font-black"
+                                    : "bg-amber-100 border-amber-500 border-dashed text-amber-800 animate-pulse font-black"
+                                  : goldMode
+                                  ? "bg-white/[0.02] border-white/5 text-white/30"
+                                  : "bg-slate-100 border-slate-200 text-slate-400"
+                              )}
+                            >
+                              {prog.picoCompleted ? `⚡ Pico (${milagroPicoCajas}c) ✓` : `⚡ Pico (${milagroPicoCajas}c)`}
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
 
-                    {/* Desglose y Matriz de Noblejas */}
+                    {/* Desglose y Matriz de Noblejas con Pico */}
                     {item.noblejasBoxes > 0 && (
                       <div className={cn("pt-2 border-t space-y-1.5", goldMode ? "border-white/5" : "border-emerald-600/10")}>
                         <div className="flex items-center justify-between text-xs text-purple-600">
@@ -714,11 +807,11 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                             🟣 NOBLEJAS ({item.noblejasDoneBoxes}/{item.noblejasBoxes} cajas)
                           </span>
                           <span className="font-mono font-bold">
-                            {prog.noblejasCompletedPallets}/{maxNobPallets} palets
+                            {prog.noblejasCompletedPallets}/{maxNobPallets} palets {nobjelasPicoCajas > 0 ? `+ ${nobjelasPicoCajas}c pico` : ""}
                           </span>
                         </div>
 
-                        {isDuoView && maxNobPallets > 0 && (
+                        {(isDuoView || maxNobPallets > 0) && (
                           <div className="flex flex-wrap gap-1.5">
                             {Array.from({ length: maxNobPallets }).map((_, nIdx) => {
                               const isDone = nIdx < prog.noblejasCompletedPallets;
@@ -740,67 +833,122 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                                 </div>
                               );
                             })}
+
+                            {nobjelasPicoCajas > 0 && (
+                              <div
+                                className={cn(
+                                  "h-7 px-2 rounded-lg border flex items-center justify-center text-[9px] font-mono font-bold",
+                                  prog.nobjelasPicoCompleted
+                                    ? goldMode
+                                      ? "bg-purple-500/35 border-purple-400 text-purple-200 font-black"
+                                      : "bg-purple-200 border-purple-500 text-purple-900 font-black"
+                                    : goldMode
+                                    ? "bg-purple-500/10 border-purple-400 border-dashed text-purple-300"
+                                    : "bg-purple-50 border-purple-300 border-dashed text-purple-700"
+                                )}
+                              >
+                                {prog.nobjelasPicoCompleted ? `Nob Pico (${nobjelasPicoCajas}c) ✓` : `Nob Pico (${nobjelasPicoCajas}c)`}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
                     )}
                   </div>
 
-                  {/* Botones de Acción Rápida Directos desde el Dashboard */}
-                  {isDuoView && (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      <button
-                        onClick={(e) => handleQuickAddMilagroPallet(item, e)}
-                        disabled={actionLoadingId === `${item.line.id}-pal` || prog.completedPallets >= totalMilagroPallets}
-                        className={cn(
-                          "h-10 px-2 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border shadow-sm",
-                          item.noblejasBoxes > 0 ? "col-span-1" : "col-span-1 sm:col-span-2",
-                          goldMode
+                  {/* Botones de Acción Rápida Dinámicos (Cambian a Pico automáticamente) */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <button
+                      onClick={(e) => handleQuickMilagroAction(item, e)}
+                      disabled={actionLoadingId === `${item.line.id}-mil` || isMilagroDone}
+                      className={cn(
+                        "h-10 px-2 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border shadow-sm",
+                        item.noblejasBoxes > 0 ? "col-span-1" : "col-span-1 sm:col-span-2",
+                        hasMilagroPalletsLeft
+                          ? goldMode
                             ? "bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/30 text-emerald-300"
                             : "bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white"
-                        )}
-                        title="Marcar +1 Palet Milagro completado"
-                        type="button"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>+1 Palet Milagro</span>
-                      </button>
+                          : hasMilagroPicoLeft
+                          ? goldMode
+                            ? "bg-amber-500/25 hover:bg-amber-500/35 border-amber-400 text-amber-200 animate-pulse font-black"
+                            : "bg-amber-600 hover:bg-amber-700 border-amber-600 text-white animate-pulse font-black"
+                          : "bg-slate-200 border-slate-300 text-slate-500"
+                      )}
+                      title={hasMilagroPalletsLeft ? "Marcar +1 Palet Milagro" : hasMilagroPicoLeft ? "Marcar Pico Milagro completado" : "Milagro completado"}
+                      type="button"
+                    >
+                      {hasMilagroPalletsLeft ? (
+                        <>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>+1 Palet Milagro</span>
+                        </>
+                      ) : hasMilagroPicoLeft ? (
+                        <>
+                          <Zap className="w-3.5 h-3.5 text-amber-300" />
+                          <span>+ Pico ({milagroPicoCajas}c)</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Milagro OK</span>
+                        </>
+                      )}
+                    </button>
 
-                      {/* Solo mostrar botón de Noblejas si la orden TIENE cajas de Noblejas */}
-                      {item.noblejasBoxes > 0 && (
-                        <button
-                          onClick={(e) => handleQuickAddNoblejasPallet(item, e)}
-                          disabled={actionLoadingId === `${item.line.id}-nob` || (maxNobPallets > 0 && prog.noblejasCompletedPallets >= maxNobPallets)}
-                          className={cn(
-                            "h-10 px-2 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border shadow-sm",
-                            goldMode
+                    {/* Solo mostrar botón de Noblejas si la orden TIENE cajas de Noblejas */}
+                    {item.noblejasBoxes > 0 && (
+                      <button
+                        onClick={(e) => handleQuickNoblejasAction(item, e)}
+                        disabled={actionLoadingId === `${item.line.id}-nob` || isNobDone}
+                        className={cn(
+                          "h-10 px-2 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border shadow-sm",
+                          hasNobPalletsLeft
+                            ? goldMode
                               ? "bg-purple-500/15 hover:bg-purple-500/25 border-purple-500/30 text-purple-300"
                               : "bg-purple-600 hover:bg-purple-700 border-purple-600 text-white"
-                          )}
-                          title="Sumar +1 Palet de Noblejas a la línea"
-                          type="button"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>+1 Palet Nob</span>
-                        </button>
-                      )}
-
-                      <button
-                        onClick={() => onSelectLine(item.line.code)}
-                        className={cn(
-                          "h-10 px-2 rounded-xl border text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1 cursor-pointer shadow-sm",
-                          item.noblejasBoxes > 0 ? "col-span-2 sm:col-span-1" : "col-span-1",
-                          goldMode
-                            ? "bg-white/5 hover:bg-white/10 border-white/10 text-white"
-                            : "bg-white hover:bg-emerald-50 border-emerald-600/20 text-[#0f291e]"
+                            : hasNobPicoLeft
+                            ? goldMode
+                              ? "bg-purple-500/30 hover:bg-purple-500/40 border-purple-400 text-purple-200 animate-pulse font-black"
+                              : "bg-purple-700 hover:bg-purple-800 border-purple-700 text-white animate-pulse font-black"
+                            : "bg-slate-200 border-slate-300 text-slate-500"
                         )}
+                        title={hasNobPalletsLeft ? "Sumar +1 Palet de Noblejas" : hasNobPicoLeft ? "Marcar Pico Noblejas completado" : "Noblejas completado"}
                         type="button"
                       >
-                        <span>✏️ Abrir Panel</span>
-                        <ChevronRight className="w-3.5 h-3.5 opacity-60" />
+                        {hasNobPalletsLeft ? (
+                          <>
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>+1 Palet Nob</span>
+                          </>
+                        ) : hasNobPicoLeft ? (
+                          <>
+                            <Zap className="w-3.5 h-3.5" />
+                            <span>+ Pico Nob ({nobjelasPicoCajas}c)</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Nob OK</span>
+                          </>
+                        )}
                       </button>
-                    </div>
-                  )}
+                    )}
+
+                    <button
+                      onClick={() => onSelectLine(item.line.code)}
+                      className={cn(
+                        "h-10 px-2 rounded-xl border text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1 cursor-pointer shadow-sm",
+                        item.noblejasBoxes > 0 ? "col-span-2 sm:col-span-1" : "col-span-1",
+                        goldMode
+                          ? "bg-white/5 hover:bg-white/10 border-white/10 text-white"
+                          : "bg-white hover:bg-emerald-50 border-emerald-600/20 text-[#0f291e]"
+                      )}
+                      type="button"
+                    >
+                      <span>✏️ Abrir Panel</span>
+                      <ChevronRight className="w-3.5 h-3.5 opacity-60" />
+                    </button>
+                  </div>
 
                   {/* Siguiente Orden en Cola si existe */}
                   {item.nextItem && isDuoView && (

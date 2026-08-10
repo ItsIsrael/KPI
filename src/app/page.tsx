@@ -413,10 +413,10 @@ export default function Home() {
                     ? "bg-purple-600 text-white shadow-sm"
                     : "text-white/40 hover:text-white hover:bg-white/5"
                 )}
-                title="Ver todas las líneas (Vista Fábrica)"
+                title="Ver Monitor Multilínea (Dashboard)"
                 type="button"
               >
-                <span>Fábrica</span>
+                <span>Dashboard</span>
               </button>
             </div>
 
@@ -861,7 +861,7 @@ export default function Home() {
                   </div>
                   <div>
                     <h1 className="text-base sm:text-lg font-black text-white leading-tight">
-                      L.I.A.R KPI · Monitor de Fábrica
+                      L.I.A.R KPI · Dashboard de Producción
                     </h1>
                     <p className="text-[10px] text-white/50">Visión simultánea de todas las líneas en planta</p>
                   </div>
@@ -877,7 +877,7 @@ export default function Home() {
                     </button>
                   ))}
                   <button className="px-2.5 py-1 rounded-lg text-xs font-black bg-purple-600 text-white shadow-sm cursor-default">
-                    Fábrica
+                    Dashboard
                   </button>
                 </div>
               </div>

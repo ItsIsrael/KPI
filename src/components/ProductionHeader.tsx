@@ -193,10 +193,10 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
                       ? "bg-purple-500 text-white shadow-sm"
                       : "text-white/40 hover:text-white hover:bg-white/5"
                   )}
-                  title="Ver todas las líneas (Vista Fábrica)"
+                  title="Ver Monitor Multilínea (Dashboard)"
                   type="button"
                 >
-                  Fábrica
+                  Dashboard
                 </button>
               </div>
 
