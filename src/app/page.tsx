@@ -830,7 +830,7 @@ export default function Home() {
     return <LoginScreen />;
   }
 
-  if (goldMode && ambientMode && isProducing) {
+  if (ambientMode && isProducing) {
     return <AmbientMode />;
   }
 
@@ -1047,7 +1047,7 @@ export default function Home() {
 
 // ===== COMPONENTS AUXILIARES DE EDICIÓN PREMIUM =====
 
-// 1. MODO AMBIENTE - RELOJ GIGANTE Y DETALLES A 10 METROS
+// 1. MODO AMBIENTE - RELOJ GIGANTE Y DETALLES A 10 METROS (FLORETTE & GOLD)
 function AmbientMode() {
   const {
     queue,
@@ -1066,25 +1066,15 @@ function AmbientMode() {
   } = useProductionStore();
 
   const [time, setTime] = useState("");
-  const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
     const updateTime = () => {
       const d = new Date();
       setTime(d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
     };
-    const timer = setTimeout(() => {
-      updateTime();
-      setNow(Date.now());
-    }, 0);
-    const interval = setInterval(() => {
-      updateTime();
-      setNow(Date.now());
-    }, 1000);
-    return () => {
-      clearTimeout(timer);
-      clearInterval(interval);
-    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
   }, []);
 
   const current = queue[currentQueueIndex];
@@ -1134,59 +1124,74 @@ function AmbientMode() {
     }
   };
 
+  const bgStyle = {
+    backgroundColor: isNoblejasActive
+      ? "#09060e"
+      : goldMode
+      ? "#090602"
+      : "#02120a",
+    backgroundImage: isNoblejasActive
+      ? "radial-gradient(circle at 50% 40%, #1f0c33 0%, #07040c 100%)"
+      : goldMode
+      ? "radial-gradient(circle at 50% 40%, #1e1304 0%, #070501 100%)"
+      : "radial-gradient(circle at 50% 40%, #062b18 0%, #020c06 100%)",
+    color: "#ffffff",
+  };
+
   return (
     <div
       onClick={toggleAmbientMode}
-      className={cn(
-        "fixed inset-0 z-[100] flex flex-col justify-between p-6 sm:p-8 md:p-12 select-none cursor-pointer transition-colors duration-500 overflow-y-auto scrollbar-none pb-[env(safe-area-inset-bottom,24px)]",
-        isNoblejasActive
-          ? "bg-[#09060c] bg-radial-gradient(circle at center, #1b0c29, #07030a)"
-          : (goldMode 
-              ? "bg-[#0c0903] bg-radial-gradient(circle at center, #1b1406, #070501)" 
-              : "bg-[#05050a] bg-radial-gradient(circle at center, #0f0f1c, #030306)")
-      )}
+      style={bgStyle}
+      className="fixed inset-0 z-[100] flex flex-col justify-between p-6 sm:p-8 md:p-12 select-none cursor-pointer transition-all duration-500 overflow-y-auto scrollbar-none pb-[env(safe-area-inset-bottom,24px)] text-white"
     >
       {/* Background ambient glows */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 opacity-85 glass-bg-blobs">
-        <div className={cn(
-          "absolute top-[10%] left-[10%] w-[500px] h-[500px] rounded-full blur-[130px] animate-pulse transition-colors duration-1000",
-          isNoblejasActive
-            ? "bg-purple-500/15"
-            : (goldMode ? "bg-amber-500/10" : "bg-emerald-500/5")
-        )} style={{ animationDuration: "8s" }} />
-        <div className={cn(
-          "absolute bottom-[10%] right-[10%] w-[500px] h-[500px] rounded-full blur-[130px] transition-colors duration-1000",
-          isNoblejasActive
-            ? "bg-indigo-500/10"
-            : (goldMode ? "bg-orange-500/5" : "bg-teal-500/3")
-        )} />
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 opacity-80">
+        <div
+          className={cn(
+            "absolute top-[10%] left-[10%] w-[500px] h-[500px] rounded-full blur-[140px] animate-pulse transition-colors duration-1000",
+            isNoblejasActive
+              ? "bg-purple-500/20"
+              : goldMode
+              ? "bg-amber-500/15"
+              : "bg-emerald-500/15"
+          )}
+          style={{ animationDuration: "8s" }}
+        />
+        <div
+          className={cn(
+            "absolute bottom-[10%] right-[10%] w-[500px] h-[500px] rounded-full blur-[140px] transition-colors duration-1000",
+            isNoblejasActive
+              ? "bg-indigo-500/15"
+              : goldMode
+              ? "bg-orange-500/10"
+              : "bg-teal-500/10"
+          )}
+        />
       </div>
 
       {/* Header */}
       <div className="relative z-10 flex items-center justify-between flex-wrap gap-2 mb-4 lg:mb-0">
         <div className="flex items-center gap-3">
-          <span className={cn(
-            "text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full transition-colors", 
-            isNoblejasActive
-              ? "bg-purple-500/15 text-purple-400 border border-purple-500/20"
-              : (goldMode 
-                  ? "bg-amber-500/15 text-amber-400 border border-amber-500/20" 
-                  : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20")
-          )}>
-            🏭 Panel Ambientador
+          <span
+            className={cn(
+              "text-[10px] sm:text-xs font-black uppercase tracking-[0.2em] px-3.5 py-1.5 rounded-full border shadow-md flex items-center gap-1.5",
+              isNoblejasActive
+                ? "bg-purple-500/20 text-purple-300 border-purple-500/40"
+                : goldMode
+                ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+            )}
+          >
+            <span>🌿</span>
+            <span>{goldMode ? "👑 PANEL AMBIENTADOR GOLD" : "🌿 PANEL AMBIENTADOR FLORETTE"}</span>
           </span>
-          {goldMode && (
-            <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[8px] sm:text-[9px] font-black px-2 py-0.5 rounded-full tracking-wider uppercase animate-bounce">
-              👑 GOLD
-            </span>
-          )}
         </div>
-        <div className="text-white/30 text-[10px] font-semibold uppercase tracking-wider">
-          Toca el fondo para salir
+        <div className="text-white/40 text-[10px] sm:text-xs font-bold uppercase tracking-wider bg-white/5 border border-white/10 px-3 py-1 rounded-full">
+          Toca en cualquier parte para salir
         </div>
       </div>
 
-      {/* Grid central responsivo */}
+      {/* Grid central responsivo de alta visibilidad */}
       <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-10 lg:gap-14 items-center justify-center max-w-5xl mx-auto my-auto w-full px-2 sm:px-4">
         
         {/* Columna Izquierda: Anillo de Progreso Gigante Neón */}
@@ -1194,8 +1199,8 @@ function AmbientMode() {
           <button
             type="button"
             onClick={handleRingClick}
-            className="relative w-48 h-48 sm:w-64 md:w-80 sm:h-64 md:h-80 mx-auto flex items-center justify-center shrink-0 hover:scale-[1.03] active:scale-[0.97] transition-all bg-transparent border-0 cursor-pointer outline-none group"
-            title="Haz clic para registrar el siguiente palet/pico"
+            className="relative w-52 h-52 sm:w-64 md:w-80 sm:h-64 md:h-80 mx-auto flex items-center justify-center shrink-0 hover:scale-[1.03] active:scale-[0.97] transition-all bg-transparent border-0 cursor-pointer outline-none group"
+            title="Haz clic para registrar el siguiente palet"
           >
             {/* SVG Progress Ring */}
             <svg className="w-full h-full transform -rotate-90 animate-fade-in" viewBox="0 0 320 320">
@@ -1204,28 +1209,28 @@ function AmbientMode() {
                 cx="160"
                 cy="160"
                 r="135"
-                className="stroke-white/5"
-                strokeWidth="10"
+                className="stroke-white/10"
+                strokeWidth="12"
                 fill="transparent"
               />
-              {/* Outer glowing progress Circle (Milagro / General progress) */}
+              {/* Outer glowing progress Circle */}
               <circle
                 cx="160"
                 cy="160"
                 r="135"
                 className={cn(
                   "transition-all duration-1000 ease-out",
-                  goldMode ? "stroke-amber-500" : "stroke-emerald-500"
+                  goldMode ? "stroke-amber-400" : "stroke-emerald-400"
                 )}
-                strokeWidth="12"
+                strokeWidth="14"
                 fill="transparent"
                 strokeDasharray={2 * Math.PI * 135}
                 strokeDashoffset={2 * Math.PI * 135 * (1 - (hasNoblejas ? (milCajasTotal > 0 ? Math.min((milagroDoneCajas / milCajasTotal) * 100, 100) : 100) : percent) / 100)}
                 strokeLinecap="round"
                 style={{
                   filter: goldMode
-                    ? "drop-shadow(0 0 10px rgba(245, 158, 11, 0.6))"
-                    : "drop-shadow(0 0 10px rgba(16, 185, 129, 0.6))"
+                    ? "drop-shadow(0 0 12px rgba(245, 158, 11, 0.8))"
+                    : "drop-shadow(0 0 12px rgba(16, 185, 129, 0.8))"
                 }}
               />
 
@@ -1236,22 +1241,22 @@ function AmbientMode() {
                     cx="160"
                     cy="160"
                     r="105"
-                    className="stroke-white/5"
-                    strokeWidth="8"
+                    className="stroke-white/10"
+                    strokeWidth="10"
                     fill="transparent"
                   />
                   <circle
                     cx="160"
                     cy="160"
                     r="105"
-                    className="transition-all duration-1000 ease-out stroke-purple-500"
-                    strokeWidth="10"
+                    className="transition-all duration-1000 ease-out stroke-purple-400"
+                    strokeWidth="12"
                     fill="transparent"
                     strokeDasharray={2 * Math.PI * 105}
                     strokeDashoffset={2 * Math.PI * 105 * (1 - (current.noblejas > 0 ? Math.min((noblejasDoneCajas / current.noblejas) * 100, 100) : 100) / 100)}
                     strokeLinecap="round"
                     style={{
-                      filter: "drop-shadow(0 0 8px rgba(168, 85, 247, 0.6))"
+                      filter: "drop-shadow(0 0 10px rgba(168, 85, 247, 0.8))"
                     }}
                   />
                 </>
@@ -1260,16 +1265,15 @@ function AmbientMode() {
             
             {/* Content inside Progress Ring */}
             <div className="absolute flex flex-col items-center justify-center text-center select-none pointer-events-none">
-              <span className="text-[10px] sm:text-xs text-white/40 uppercase tracking-[0.25em] font-bold mb-1">Hora de Fábrica</span>
-              <span className="text-2xl sm:text-4xl md:text-5xl font-black font-mono tracking-tight text-white mb-2 leading-none">
+              <span className="text-[10px] sm:text-xs text-white/60 uppercase tracking-[0.25em] font-bold mb-1">
                 {time}
               </span>
-              <div className={cn("h-px w-10 sm:w-14 my-1.5", isNoblejasActive ? "bg-purple-500/20" : (goldMode ? "bg-amber-500/20" : "bg-emerald-500/20"))} />
+              <div className={cn("h-px w-10 sm:w-14 my-1", isNoblejasActive ? "bg-purple-500/40" : (goldMode ? "bg-amber-500/40" : "bg-emerald-500/40"))} />
               <span className={cn(
-                "text-3xl sm:text-5xl md:text-6xl font-black font-mono leading-none mt-1 sm:mt-1.5", 
+                "text-4xl sm:text-6xl md:text-7xl font-black font-mono leading-none my-1", 
                 isNoblejasActive 
-                  ? "text-purple-400 drop-shadow-[0_0_10px_rgba(168,85,247,0.4)]" 
-                  : (goldMode ? "text-amber-400 drop-shadow-[0_0_10px_rgba(245, 158, 11, 0.4)]" : "text-emerald-400 drop-shadow-[0_0_10px_rgba(16, 185, 129, 0.4)]")
+                  ? "text-purple-300 drop-shadow-[0_0_12px_rgba(168,85,247,0.6)]" 
+                  : (goldMode ? "text-amber-300 drop-shadow-[0_0_12px_rgba(245,158,11,0.6)]" : "text-emerald-300 drop-shadow-[0_0_12px_rgba(52,211,153,0.6)]")
               )}>
                 {percent}%
               </span>
@@ -1277,16 +1281,16 @@ function AmbientMode() {
               {/* Active phase badge inside ring */}
               {hasNoblejas && (
                 <span className={cn(
-                  "text-[9px] uppercase tracking-widest font-black px-2 py-0.5 rounded-md mt-2 animate-pulse",
+                  "text-[9px] uppercase tracking-widest font-black px-2.5 py-0.5 rounded-md mt-1 border",
                   isNoblejasActive
-                    ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
-                    : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                    ? "bg-purple-500/30 text-purple-200 border-purple-400 shadow-sm"
+                    : "bg-amber-500/30 text-amber-200 border-amber-400 shadow-sm"
                 )}>
-                  {isNoblejasActive ? "Fase Noblejas" : "Fase Milagro"}
+                  {isNoblejasActive ? "🟣 Fase Noblejas" : "📦 Fase Milagro"}
                 </span>
               )}
 
-              <span className="text-[9px] sm:text-[10px] text-white/50 uppercase tracking-widest font-black mt-1 group-hover:text-emerald-400 group-hover:scale-110 transition-all duration-200">
+              <span className="text-[10px] sm:text-[11px] text-white/70 uppercase tracking-widest font-black mt-1 group-hover:text-emerald-300 transition-all">
                 {percent === 100 ? "Completado" : "Toca para +1"}
               </span>
             </div>
@@ -1298,70 +1302,66 @@ function AmbientMode() {
           
           {/* Nombre y datos del formato */}
           <div className="space-y-2 sm:space-y-3">
-            <h2 className={cn("text-3xl sm:text-4xl md:text-6xl font-black tracking-wide leading-tight", isNoblejasActive ? "text-purple-400" : (goldMode ? "text-gold-gradient" : "text-white"))}>
-              {current.saladName}
+            <h2 className={cn(
+              "text-3xl sm:text-5xl md:text-6xl font-black tracking-wide leading-tight text-white drop-shadow-md",
+              isNoblejasActive ? "text-purple-300" : (goldMode ? "text-gold-gradient" : "text-emerald-100")
+            )}>
+              🥗 {current.saladName}
             </h2>
             
             <div className="flex items-center justify-center lg:justify-start gap-1.5 sm:gap-2 flex-wrap">
               <span className={cn(
-                "text-xs sm:text-sm md:text-base font-black px-2.5 py-0.5 sm:py-1 rounded-xl bg-white/5 border border-white/10 tracking-wide uppercase", 
-                isNoblejasActive ? "text-purple-400" : (goldMode ? "text-amber-400" : "text-emerald-400")
+                "text-xs sm:text-sm md:text-base font-black px-3 py-1 rounded-xl bg-white/10 border border-white/20 tracking-wide uppercase", 
+                isNoblejasActive ? "text-purple-300" : (goldMode ? "text-amber-300" : "text-emerald-300")
               )}>
                 📦 {current.boxType}
               </span>
               
               {getActiveLote(queue, currentQueueIndex) && (
                 <span className={cn(
-                  "text-[10px] sm:text-xs md:text-sm font-mono font-bold border px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-xl shrink-0",
+                  "text-[11px] sm:text-xs md:text-sm font-mono font-bold border px-2.5 py-1 rounded-xl shrink-0",
                   current.cambioLote
-                    ? "bg-purple-500/20 text-purple-300 border-purple-500/40 shadow-[0_0_8px_rgba(168,85,247,0.2)] animate-pulse"
-                    : "bg-purple-500/10 text-purple-300 border-purple-500/20"
+                    ? "bg-purple-500/30 text-purple-200 border-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.4)] animate-pulse"
+                    : "bg-white/10 text-white/80 border-white/20"
                 )}>
-                  Lote: {getActiveLote(queue, currentQueueIndex)}
+                  🏷️ Lote: {getActiveLote(queue, currentQueueIndex)}
                 </span>
               )}
               {current.cambioLote && (
-                <span className="bg-purple-500 text-white text-[8px] sm:text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wider shadow-[0_0_8px_rgba(168,85,247,0.4)] animate-bounce shrink-0">
+                <span className="bg-purple-600 text-white text-[9px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wider shadow-md animate-bounce shrink-0">
                   🔄 CAMBIO DE LOTE
                 </span>
               )}
             </div>
             
             {current.note && (
-              <div className="mx-auto lg:mx-0 max-w-md px-3.5 py-1.5 bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] sm:text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 rounded-xl animate-pulse">
+              <div className="mx-auto lg:mx-0 max-w-md px-3.5 py-1.5 bg-red-500/20 border border-red-500/40 text-red-200 text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 rounded-xl animate-pulse">
                 <span>⚠️ ALERTA:</span>
                 <span>{current.note}</span>
-              </div>
-            )}
-
-            {current.saladName.toUpperCase().includes("PROMO") && (
-              <div className="mx-auto lg:mx-0 max-w-md px-3.5 py-1.5 bg-amber-500/10 border border-amber-500/25 text-amber-400 text-[10px] sm:text-xs font-bold flex items-center justify-center lg:justify-start gap-1.5 rounded-xl animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.2)] border-dashed border-amber-400/40">
-                <span>✨ ALERTA PROMO:</span>
-                <span>LLEVAR FILM PROMO</span>
               </div>
             )}
           </div>
 
           {/* Cuadrícula de Palets Interactiva */}
           <div className="space-y-4 w-full" onClick={(e) => e.stopPropagation()}>
-            {/* Sección Noblejas (si aplica) */}
+            {/* Sección Noblejas */}
             {hasNoblejas && (
               <div className={cn(
-                "space-y-1.5 sm:space-y-2 border rounded-2xl p-4 transition-all duration-500",
+                "space-y-2 border rounded-2xl p-4 transition-all duration-500",
                 isNoblejasActive
-                  ? "border-purple-500 bg-purple-950/20 shadow-[0_0_20px_rgba(168,85,247,0.35)] active-pulse-purple"
-                  : "border-purple-500/10 bg-purple-950/[0.02] opacity-45"
+                  ? "border-purple-500/50 bg-purple-950/40 shadow-[0_0_20px_rgba(168,85,247,0.25)]"
+                  : "border-purple-500/20 bg-purple-950/10 opacity-50"
               )}>
-                <p className="text-[10px] text-purple-400 uppercase tracking-[0.18em] font-black text-center lg:text-left flex items-center justify-center lg:justify-start gap-1.5">
-                  🏢 Noblejas ({nobPalletsDone} / {nobPalletsTotal} palets)
+                <p className="text-xs text-purple-300 uppercase tracking-[0.18em] font-black text-center lg:text-left flex items-center justify-center lg:justify-start gap-1.5">
+                  🟣 Noblejas ({nobPalletsDone} / {nobPalletsTotal} palets)
                   {isNoblejasActive && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-ping" />
+                    <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
                   )}
                   {currentProgress.noblejasCompleted && (
-                    <span className="text-[10px]" title="Completado">✅</span>
+                    <span>✅</span>
                   )}
                 </p>
-                <div className="flex flex-wrap gap-1.5 sm:gap-2 justify-center lg:justify-start max-w-sm mx-auto lg:mx-0">
+                <div className="flex flex-wrap gap-2 justify-center lg:justify-start max-w-sm mx-auto lg:mx-0">
                   {Array.from({ length: nobPalletsTotal }).map((_, idx) => {
                     const isCompleted = idx < nobPalletsDone;
                     return (
@@ -1376,18 +1376,14 @@ function AmbientMode() {
                           }
                         }}
                         className={cn(
-                          "w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl border flex flex-col items-center justify-center transition-all duration-300 relative overflow-hidden active:scale-95 cursor-pointer",
+                          "w-12 h-12 rounded-xl border flex flex-col items-center justify-center transition-all duration-300 relative overflow-hidden active:scale-95 cursor-pointer shadow-sm",
                           isCompleted
-                            ? "bg-purple-500/20 border-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.25)] text-purple-300 font-bold"
-                            : "bg-white/5 border-white/10 text-white/20 hover:bg-white/10"
+                            ? "bg-purple-600/30 border-purple-400 text-purple-200 font-bold"
+                            : "bg-white/10 border-white/15 text-white/40 hover:bg-white/15 hover:text-white"
                         )}
                       >
-                        <span className="text-[8px] sm:text-[9px] font-bold font-mono">P{idx + 1}</span>
-                        {isCompleted && (
-                          <span className="absolute bottom-0.5 right-0.5 text-[6px] sm:text-[8px] leading-none">
-                            👑
-                          </span>
-                        )}
+                        <span className="text-[10px] font-bold font-mono">P{idx + 1}</span>
+                        <span className="text-[10px]">{isCompleted ? "📦 ✓" : "📦"}</span>
                       </button>
                     );
                   })}
@@ -1398,19 +1394,14 @@ function AmbientMode() {
                         setNobjelasPicoCompleted(!nobPicoDone);
                       }}
                       className={cn(
-                        "w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl border flex flex-col items-center justify-center transition-all duration-300 relative overflow-hidden active:scale-95 cursor-pointer",
+                        "w-12 h-12 rounded-xl border flex flex-col items-center justify-center transition-all duration-300 relative overflow-hidden active:scale-95 cursor-pointer shadow-sm",
                         nobPicoDone
-                          ? "bg-purple-500/20 border-purple-400 text-purple-300 font-bold shadow-[0_0_10px_rgba(168,85,247,0.25)]"
-                          : "bg-white/5 border-white/10 border-dashed text-white/25 hover:bg-white/10"
+                          ? "bg-purple-600/30 border-purple-400 text-purple-200 font-bold"
+                          : "bg-white/10 border-white/15 border-dashed text-white/40 hover:bg-white/15"
                       )}
                     >
-                      <span className="text-[8px] sm:text-[9px] font-bold font-mono leading-none">PICO</span>
-                      <span className="text-[6.5px] sm:text-[7.5px] text-white/40 font-semibold mt-0.5">{nobPico}c</span>
-                      {nobPicoDone && (
-                        <span className="absolute bottom-0.5 right-0.5 text-[6px] sm:text-[8px] leading-none">
-                          👑
-                        </span>
-                      )}
+                      <span className="text-[9px] font-bold font-mono">PICO</span>
+                      <span className="text-[8px] opacity-80">{nobPico}c</span>
                     </button>
                   )}
                 </div>
@@ -1419,28 +1410,26 @@ function AmbientMode() {
 
             {/* Sección Milagro */}
             <div className={cn(
-              "space-y-1.5 sm:space-y-2 border rounded-2xl p-4 transition-all duration-500",
+              "space-y-2 border rounded-2xl p-4 transition-all duration-500",
               isMilagroActive
                 ? goldMode
-                  ? "border-amber-500 bg-amber-950/20 shadow-[0_0_20px_rgba(245,158,11,0.35)] active-pulse-gold"
-                  : "border-emerald-500 bg-emerald-950/20 shadow-[0_0_20px_rgba(16,185,129,0.35)] active-pulse-emerald"
-                : goldMode
-                  ? "border-amber-500/10 bg-amber-950/[0.02] opacity-45"
-                  : "border-emerald-500/10 bg-emerald-950/[0.02] opacity-45"
+                  ? "border-amber-500/50 bg-amber-950/40 shadow-[0_0_20px_rgba(245,158,11,0.25)]"
+                  : "border-emerald-500/50 bg-emerald-950/40 shadow-[0_0_20px_rgba(16,185,129,0.25)]"
+                : "border-white/10 bg-white/5 opacity-50"
             )}>
               <p className={cn(
-                "text-[10px] uppercase tracking-[0.18em] font-black text-center lg:text-left flex items-center justify-center lg:justify-start gap-1.5",
-                goldMode ? "text-amber-400" : "text-emerald-400"
+                "text-xs uppercase tracking-[0.18em] font-black text-center lg:text-left flex items-center justify-center lg:justify-start gap-1.5",
+                goldMode ? "text-amber-300" : "text-emerald-300"
               )}>
-                {hasNoblejas ? "😇 Milagro" : "📦 Producción Milagro"} ({milPalletsDone} / {milPalletsTotal} palets)
+                {hasNoblejas ? "😇 Milagro" : "🪵 Producción Milagro"} ({milPalletsDone} / {milPalletsTotal} palets)
                 {isMilagroActive && (
-                  <span className={cn("w-1.5 h-1.5 rounded-full animate-ping", goldMode ? "bg-amber-400" : "bg-emerald-400")} />
+                  <span className={cn("w-2 h-2 rounded-full animate-ping", goldMode ? "bg-amber-400" : "bg-emerald-400")} />
                 )}
                 {milPalletsDone >= milPalletsTotal && (!milPico || milPicoDone) && (
-                  <span className="text-[10px]" title="Completado">✅</span>
+                  <span>✅</span>
                 )}
               </p>
-              <div className="flex flex-wrap gap-1.5 sm:gap-2 justify-center lg:justify-start max-w-sm mx-auto lg:mx-0">
+              <div className="flex flex-wrap gap-2 justify-center lg:justify-start max-w-sm mx-auto lg:mx-0">
                 {Array.from({ length: milPalletsTotal }).map((_, idx) => {
                   const isCompleted = idx < milPalletsDone;
                   return (
@@ -1455,20 +1444,16 @@ function AmbientMode() {
                         }
                       }}
                       className={cn(
-                        "w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl border flex flex-col items-center justify-center transition-all duration-300 relative overflow-hidden active:scale-95 cursor-pointer",
+                        "w-12 h-12 rounded-xl border flex flex-col items-center justify-center transition-all duration-300 relative overflow-hidden active:scale-95 cursor-pointer shadow-sm",
                         isCompleted
                           ? goldMode
-                            ? "bg-amber-500/20 border-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.25)] text-amber-300 font-bold"
-                            : "bg-emerald-500/20 border-emerald-400 text-emerald-300 font-bold"
-                          : "bg-white/5 border-white/10 text-white/20 hover:bg-white/10"
+                            ? "bg-amber-500/30 border-amber-400 text-amber-200 font-bold"
+                            : "bg-emerald-600/30 border-emerald-400 text-emerald-200 font-bold"
+                          : "bg-white/10 border-white/15 text-white/40 hover:bg-white/15 hover:text-white"
                       )}
                     >
-                      <span className="text-[8px] sm:text-[9px] font-bold font-mono">P{idx + 1}</span>
-                      {isCompleted && (
-                        <span className="absolute bottom-0.5 right-0.5 text-[6px] sm:text-[8px] leading-none">
-                          {goldMode ? "👑" : "✔"}
-                        </span>
-                      )}
+                      <span className="text-[10px] font-bold font-mono">P{idx + 1}</span>
+                      <span className="text-[10px]">{isCompleted ? "📦 ✓" : "📦"}</span>
                     </button>
                   );
                 })}
@@ -1479,31 +1464,27 @@ function AmbientMode() {
                       setPicoCompleted(!milPicoDone);
                     }}
                     className={cn(
-                      "w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl border flex flex-col items-center justify-center transition-all duration-300 relative overflow-hidden active:scale-95 cursor-pointer",
+                      "w-12 h-12 rounded-xl border flex flex-col items-center justify-center transition-all duration-300 relative overflow-hidden active:scale-95 cursor-pointer shadow-sm",
                       milPicoDone
                         ? goldMode
-                          ? "bg-amber-500/20 border-amber-400 text-amber-300 font-bold shadow-[0_0_10px_rgba(245,158,11,0.25)]"
-                          : "bg-emerald-500/20 border-emerald-400 text-emerald-300 font-bold"
-                        : "bg-white/5 border-white/10 border-dashed text-white/25 hover:bg-white/10"
+                          ? "bg-amber-500/30 border-amber-400 text-amber-200 font-bold"
+                          : "bg-emerald-600/30 border-emerald-400 text-emerald-200 font-bold"
+                        : "bg-white/10 border-white/15 border-dashed text-white/40 hover:bg-white/15"
                     )}
                   >
-                    <span className="text-[8px] sm:text-[9px] font-bold font-mono leading-none">PICO</span>
-                    <span className="text-[6.5px] sm:text-[7.5px] text-white/40 font-semibold mt-0.5">{milPico}c</span>
-                    {milPicoDone && (
-                      <span className="absolute bottom-0.5 right-0.5 text-[6px] sm:text-[8px] leading-none">
-                        {goldMode ? "👑" : "✔"}
-                      </span>
-                    )}
+                    <span className="text-[9px] font-bold font-mono">PICO</span>
+                    <span className="text-[8px] opacity-80">{milPico}c</span>
                   </button>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Estadísticas de cajas */}
-          <div className="flex flex-col gap-3 max-w-sm mx-auto lg:mx-0 w-full border-t border-white/5 pt-3">
-            <div className="flex justify-center lg:justify-start items-center text-xs font-bold text-white/60">
-              <span>Cajas: {currentDone} / {totalCajasObjetivo} <span className="text-white/30 font-medium">({totalCajasObjetivo - currentDone} rest.)</span></span>
+          {/* Estadísticas de cajas y navegación */}
+          <div className="flex flex-col gap-3 max-w-sm mx-auto lg:mx-0 w-full border-t border-white/10 pt-3">
+            <div className="flex justify-between items-center text-xs font-bold text-white/80">
+              <span>📦 Cajas: {currentDone} / {totalCajasObjetivo}</span>
+              <span className="text-white/50">{totalCajasObjetivo - currentDone} restantes</span>
             </div>
 
             {/* Botones Anterior y Siguiente */}
@@ -1515,7 +1496,7 @@ function AmbientMode() {
                     e.stopPropagation();
                     jumpToQueueItem(currentQueueIndex - 1);
                   }}
-                  className="flex-1 py-3 px-4 text-xs font-black rounded-2xl bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 hover:text-white transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer shadow-md shrink-0"
+                  className="flex-1 py-3 px-4 text-xs font-black rounded-2xl bg-white/10 border border-white/15 text-white/80 hover:bg-white/20 hover:text-white transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer shadow-md shrink-0"
                   title="Volver al formato anterior"
                 >
                   ◀ ANT.
@@ -1531,8 +1512,8 @@ function AmbientMode() {
                   "py-3 px-4 text-xs font-black rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-lg",
                   currentQueueIndex > 0 ? "flex-[2]" : "w-full",
                   percent === 100
-                    ? "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white shadow-emerald-500/25 animate-pulse"
-                    : "bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white"
+                    ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-emerald-500/25 animate-pulse font-black"
+                    : "bg-white/15 border border-white/20 text-white hover:bg-white/25"
                 )}
               >
                 <span>{queue[currentQueueIndex + 1] ? "SIGUIENTE ➔" : "FINALIZAR ➔"}</span>
@@ -1544,7 +1525,7 @@ function AmbientMode() {
       </div>
 
       {/* Footer */}
-      <div className="relative z-10 flex items-center justify-between border-t border-white/5 pt-4 mt-6 text-[9px] sm:text-xs font-semibold uppercase tracking-wider text-white/30 flex-wrap gap-2">
+      <div className="relative z-10 flex items-center justify-between border-t border-white/10 pt-4 mt-6 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-white/50 flex-wrap gap-2">
         <div>
           Formato {currentQueueIndex + 1} de {queue.length} en Cola
         </div>
@@ -1552,61 +1533,34 @@ function AmbientMode() {
           const nextItem = queue[currentQueueIndex + 1];
           const transition = getTransitionType(current, nextItem);
           return (
-            <div className="flex items-center gap-2 bg-white/[0.02] border border-white/5 rounded-xl px-3 py-1.5 text-[9px] sm:text-[10px] text-white/55 backdrop-blur-sm transition-all hover:border-white/10 select-none animate-fade-in shrink-0">
-              <span className="text-white/20 font-black">SIGUIENTE:</span>
-              <span className="font-extrabold text-white/80 truncate max-w-[120px]">{nextItem.saladName}</span>
-              <span className="text-white/40 font-bold">({nextItem.boxType})</span>
+            <div className="flex items-center gap-2 bg-white/10 border border-white/15 rounded-xl px-3 py-1.5 text-[10px] sm:text-[11px] text-white/90 backdrop-blur-md transition-all select-none shrink-0">
+              <span className="text-white/40 font-black">SIGUIENTE:</span>
+              <span className="font-extrabold text-white">{nextItem.saladName}</span>
+              <span className="text-white/60 font-bold">({nextItem.boxType})</span>
               
-              {/* Mini transition chips */}
               {transition === "salad-change" && (
-                <span className="bg-red-500/15 border border-red-500/30 text-red-400 text-[8px] font-black uppercase px-1.5 py-0.5 rounded-lg flex items-center gap-1 shadow-[0_0_8px_rgba(239,68,68,0.15)] animate-pulse">
+                <span className="bg-red-500/30 border border-red-500/50 text-red-300 text-[8px] font-black uppercase px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-sm">
                   🥗 CAMBIO
                 </span>
               )}
               {transition === "box-change" && (
-                <span className="bg-orange-500/15 border border-orange-500/30 text-orange-400 text-[8px] font-black uppercase px-1.5 py-0.5 rounded-lg flex items-center gap-1 shadow-[0_0_8px_rgba(249,115,22,0.15)]">
+                <span className="bg-orange-500/30 border border-orange-500/50 text-orange-300 text-[8px] font-black uppercase px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-sm">
                   📦 CAJA
                 </span>
               )}
               {transition === "lote-change" && (
-                <span className="bg-purple-500/15 border border-purple-500/30 text-purple-400 text-[8px] font-black uppercase px-1.5 py-0.5 rounded-lg flex items-center gap-1 shadow-[0_0_8px_rgba(168,85,247,0.15)]">
+                <span className="bg-purple-500/30 border border-purple-500/50 text-purple-300 text-[8px] font-black uppercase px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-sm">
                   🔄 LOTE
                 </span>
               )}
             </div>
           );
         })() : (
-          <span className="text-[9px] sm:text-[10px] font-bold text-white/20 bg-white/[0.01] border border-white/5 rounded-xl px-3 py-1.5 select-none shrink-0 uppercase tracking-widest">
+          <span className="text-[10px] font-bold text-white/40 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 select-none shrink-0 uppercase tracking-widest">
             🏁 Fin de Cola
           </span>
         )}
       </div>
-
-      {/* AmbientMode Specific Styles */}
-      <style jsx>{`
-        @keyframes pulse-subtle {
-          0%, 100% { box-shadow: 0 0 12px var(--pulse-color); border-color: var(--pulse-border); }
-          50% { box-shadow: 0 0 24px var(--pulse-color); border-color: var(--pulse-border-bright); }
-        }
-        .active-pulse-purple {
-          --pulse-color: rgba(168, 85, 247, 0.25);
-          --pulse-border: rgba(168, 85, 247, 0.5);
-          --pulse-border-bright: rgba(192, 132, 252, 0.8);
-          animation: pulse-subtle 2s infinite ease-in-out;
-        }
-        .active-pulse-gold {
-          --pulse-color: rgba(245, 158, 11, 0.25);
-          --pulse-border: rgba(245, 158, 11, 0.5);
-          --pulse-border-bright: rgba(251, 191, 36, 0.8);
-          animation: pulse-subtle 2s infinite ease-in-out;
-        }
-        .active-pulse-emerald {
-          --pulse-color: rgba(16, 185, 129, 0.25);
-          --pulse-border: rgba(16, 185, 129, 0.5);
-          --pulse-border-bright: rgba(52, 211, 153, 0.8);
-          animation: pulse-subtle 2s infinite ease-in-out;
-        }
-      `}</style>
     </div>
   );
 }

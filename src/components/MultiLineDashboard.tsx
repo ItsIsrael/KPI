@@ -18,7 +18,9 @@ import {
   Plus, 
   ArrowRight, 
   ChevronRight,
-  Layers
+  Layers,
+  CheckCircle2,
+  Trophy
 } from "lucide-react";
 
 interface MultiLineDashboardProps {
@@ -42,61 +44,61 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
       const data = await getFactoryOverview();
       const localStore = useProductionStore.getState();
 
-      // Fusionar con lineStorage local para garantizar datos inmediatos
+      // Fusionar inteligentemente con lineStorage local
       const merged = data.map((o) => {
         const local = localStore.lineStorage[o.line.code];
-        if (local && local.queue && local.queue.length > 0 && o.queueLength === 0) {
+        if (local && local.queue && local.queue.length > 0) {
           const currentItem = local.queue[local.currentQueueIndex] || local.queue[0];
-          const calc = currentItem ? calculateFormat({
-            id: currentItem.formatId,
-            boxType: currentItem.boxType,
-            quantity: currentItem.quantity,
-            noblejas: currentItem.noblejas,
-            boxesPerPallet: currentItem.boxesPerPallet,
-          }) : undefined;
-          const prog = currentItem ? local.queueProgress[currentItem.id] || {
-            queueItemId: currentItem.id,
-            completedPallets: 0,
-            picoCompleted: false,
-            noblejasCompleted: false,
-            noblejasCompletedPallets: 0,
-            nobjelasPicoCompleted: false,
-            finished: false,
-            boxesAdjustment: 0,
-          } : undefined;
+          const localProg = currentItem ? local.queueProgress[currentItem.id] : undefined;
+          const dbProg = o.progress;
 
-          const totalBoxes = currentItem?.quantity || 0;
-          const noblejasBoxes = currentItem?.noblejas || 0;
-          const totalPallets = calc?.pallets || 0;
-          const completedPallets = prog?.completedPallets || 0;
-          const noblejasDoneBoxes = (prog?.noblejasCompletedPallets || 0) * (currentItem?.boxesPerPallet || 72);
-          const milagroDoneBoxes = completedPallets * (currentItem?.boxesPerPallet || 72) + (prog?.picoCompleted ? (calc?.pico || 0) : 0);
-          const completedBoxes = noblejasDoneBoxes + milagroDoneBoxes;
+          // Seleccionar el progreso más avanzado (optimista / local)
+          const prog = (localProg && (!dbProg || localProg.completedPallets >= (dbProg.completedPallets || 0)))
+            ? localProg
+            : (dbProg || localProg);
 
-          return {
-            ...o,
-            currentSaladName: currentItem?.saladName,
-            currentBoxType: currentItem?.boxType,
-            currentLote: currentItem?.lote,
-            totalBoxes,
-            completedBoxes,
-            totalPallets,
-            completedPallets,
-            noblejasBoxes,
-            noblejasDoneBoxes,
-            percent: totalBoxes > 0 ? Math.min(Math.round((completedBoxes / totalBoxes) * 100), 100) : 0,
-            queueLength: local.queue.length,
-            pendingCount: Math.max(0, local.queue.length - local.currentQueueIndex - 1),
-            currentItem,
-            nextItem: local.queue[local.currentQueueIndex + 1],
-            calc,
-            progress: prog,
-            queue: local.queue,
-            line: {
-              ...o.line,
-              isProducing: local.isProducing,
-            },
-          };
+          if (currentItem && prog) {
+            const calc = calculateFormat({
+              id: currentItem.formatId,
+              boxType: currentItem.boxType,
+              quantity: currentItem.quantity,
+              noblejas: currentItem.noblejas,
+              boxesPerPallet: currentItem.boxesPerPallet,
+            });
+
+            const totalBoxes = currentItem.quantity;
+            const noblejasBoxes = currentItem.noblejas;
+            const totalPallets = calc.pallets;
+            const completedPallets = prog.completedPallets;
+            const noblejasDoneBoxes = (prog.noblejasCompletedPallets || 0) * currentItem.boxesPerPallet;
+            const milagroDoneBoxes = completedPallets * currentItem.boxesPerPallet + (prog.picoCompleted ? calc.pico : 0);
+            const completedBoxes = noblejasDoneBoxes + milagroDoneBoxes;
+
+            return {
+              ...o,
+              currentSaladName: currentItem.saladName,
+              currentBoxType: currentItem.boxType,
+              currentLote: currentItem.lote,
+              totalBoxes,
+              completedBoxes,
+              totalPallets,
+              completedPallets,
+              noblejasBoxes,
+              noblejasDoneBoxes,
+              percent: totalBoxes > 0 ? Math.min(Math.round((completedBoxes / totalBoxes) * 100), 100) : 0,
+              queueLength: Math.max(o.queueLength, local.queue.length),
+              pendingCount: Math.max(0, local.queue.length - local.currentQueueIndex - 1),
+              currentItem,
+              nextItem: local.queue[local.currentQueueIndex + 1] || o.nextItem,
+              calc,
+              progress: prog,
+              queue: local.queue,
+              line: {
+                ...o.line,
+                isProducing: local.isProducing ?? o.line.isProducing,
+              },
+            };
+          }
         }
         return o;
       });
@@ -126,7 +128,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
     return () => clearInterval(interval);
   }, []);
 
-  // Quick Action: Añadir Palet Milagro directamente desde el Dashboard
+  // Quick Action: Añadir Palet Milagro directamente desde el Dashboard (Persistente y sin parpadeos)
   const handleQuickAddMilagroPallet = async (item: LineOverview, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!item.currentItem || !item.calc) return;
@@ -149,9 +151,13 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
       ...prog,
       completedPallets: nextPallets,
       finished: isFinished,
+      palletLastUpdated: Date.now(),
     };
 
-    // Actualización optimista inmediata en UI
+    // 1. Actualización en Store global (incluye lineStorage local)
+    useProductionStore.getState().updateLineItemProgress(item.line.code, item.currentItem.id, updatedProg);
+
+    // 2. Actualización optimista inmediata en UI
     setOverview((prev) =>
       prev.map((o) => {
         if (o.line.id !== item.line.id) return o;
@@ -166,14 +172,15 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
       })
     );
 
+    // 3. Sincronización asíncrona con Supabase
     await syncProgress(item.currentItem.id, updatedProg);
     setActionLoadingId(null);
   };
 
-  // Quick Action: Añadir Palet Noblejas directamente desde el Dashboard
+  // Quick Action: Añadir Palet Noblejas directamente desde el Dashboard (Persistente)
   const handleQuickAddNoblejasPallet = async (item: LineOverview, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!item.currentItem) return;
+    if (!item.currentItem || item.noblejasBoxes <= 0) return;
     const prog: FormatProgress = item.progress || {
       queueItemId: item.currentItem.id,
       completedPallets: 0,
@@ -184,33 +191,38 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
       finished: false,
       boxesAdjustment: 0,
     };
+    const maxNobPallets = Math.floor(item.noblejasBoxes / item.currentItem.boxesPerPallet);
+    if (prog.noblejasCompletedPallets >= maxNobPallets) return;
 
     setActionLoadingId(`${item.line.id}-nob`);
     const nextNobPallets = prog.noblejasCompletedPallets + 1;
+    const isNobDone = nextNobPallets >= maxNobPallets;
     const updatedProg: FormatProgress = {
       ...prog,
-      noblejasCompleted: true,
+      noblejasCompleted: isNobDone,
       noblejasCompletedPallets: nextNobPallets,
+      palletLastUpdated: Date.now(),
     };
 
-    const boxesPerPallet = item.currentItem.boxesPerPallet;
-    const newNobBoxes = Math.max(item.noblejasBoxes, nextNobPallets * boxesPerPallet);
+    // 1. Actualización en Store global
+    useProductionStore.getState().updateLineItemProgress(item.line.code, item.currentItem.id, updatedProg);
 
+    // 2. Actualización optimista en UI
     setOverview((prev) =>
       prev.map((o) => {
         if (o.line.id !== item.line.id) return o;
-        const newDone = o.completedBoxes + boxesPerPallet;
+        const newDone = o.completedBoxes + item.currentItem!.boxesPerPallet;
         return {
           ...o,
-          noblejasBoxes: newNobBoxes,
           completedBoxes: newDone,
-          noblejasDoneBoxes: o.noblejasDoneBoxes + boxesPerPallet,
+          noblejasDoneBoxes: o.noblejasDoneBoxes + item.currentItem!.boxesPerPallet,
           percent: Math.min(Math.round((newDone / o.totalBoxes) * 100), 100),
           progress: updatedProg,
         };
       })
     );
 
+    // 3. Sincronización con Supabase
     await syncProgress(item.currentItem.id, updatedProg);
     setActionLoadingId(null);
   };
@@ -481,11 +493,12 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
             boxesAdjustment: 0,
           };
           const totalMilagroPallets = calc ? calc.pallets : item.totalPallets;
-          const maxNobPallets = currentItem ? Math.floor(item.noblejasBoxes / currentItem.boxesPerPallet) : 0;
+          const maxNobPallets = currentItem && item.noblejasBoxes > 0 ? Math.floor(item.noblejasBoxes / currentItem.boxesPerPallet) : 0;
 
-          // Estado dinámico automático: sólo está EN MARCHA si tiene órdenes activas Y está marcada como productiva
+          // Estado dinámico automático: detecta finalizado, en marcha o en espera
           const hasActiveOrders = item.queueLength > 0 && !!item.currentSaladName;
-          const isProducing = item.line.isProducing && hasActiveOrders;
+          const isFinished = hasActiveOrders && (item.percent >= 100 || prog.finished);
+          const isProducing = item.line.isProducing && hasActiveOrders && !isFinished;
 
           return (
             <div
@@ -496,6 +509,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                 goldMode
                   ? "border-amber-500/25 hover:border-amber-500/50 bg-[#120e06]/90 text-white"
                   : "border-emerald-600/20 hover:border-emerald-500 bg-white/95 text-[#0f291e] shadow-lg",
+                isFinished && (goldMode ? "ring-2 ring-amber-400 border-amber-400 bg-amber-950/20" : "ring-2 ring-emerald-500 border-emerald-500 bg-emerald-50/80"),
                 isProducing && "ring-1 ring-emerald-500/30 shadow-xl shadow-emerald-500/5",
                 isDuoView && "p-6 sm:p-7"
               )}
@@ -524,25 +538,38 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                   </div>
                 </div>
 
-                {/* Botón de Estado Dinámico de la Línea */}
+                {/* Botón de Estado Dinámico de la Línea (Detecta Finalizado) */}
                 <div className="flex items-center gap-2">
                   <button
                     onClick={(e) => handleToggleLineProducing(item, e)}
                     disabled={!hasActiveOrders}
                     className={cn(
-                      "h-8 px-2.5 rounded-xl border text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 disabled:cursor-default",
-                      isProducing
+                      "h-8 px-2.5 rounded-xl border text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 disabled:cursor-default shadow-sm",
+                      isFinished
+                        ? goldMode
+                          ? "bg-amber-500/25 border-amber-400 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.3)] animate-pulse"
+                          : "bg-emerald-500 text-white border-emerald-600 shadow-md shadow-emerald-500/30"
+                        : isProducing
                         ? goldMode
                           ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25"
                           : "bg-emerald-100 border-emerald-300 text-emerald-800 hover:bg-emerald-200"
+                        : hasActiveOrders
+                        ? goldMode
+                          ? "bg-white/5 border-white/10 text-white/40"
+                          : "bg-slate-100 border-slate-200 text-slate-500"
                         : goldMode
                         ? "bg-white/5 border-white/10 text-white/40"
                         : "bg-slate-100 border-slate-200 text-slate-500"
                     )}
-                    title={hasActiveOrders ? (isProducing ? "Pausar línea" : "Iniciar producción") : "Sin órdenes activas"}
+                    title={hasActiveOrders ? (isFinished ? "Formato completado al 100%" : isProducing ? "Pausar línea" : "Iniciar producción") : "Sin órdenes activas"}
                     type="button"
                   >
-                    {isProducing ? (
+                    {isFinished ? (
+                      <>
+                        <Trophy className="w-3.5 h-3.5 animate-bounce" />
+                        <span>🏆 FINALIZADO</span>
+                      </>
+                    ) : isProducing ? (
                       <>
                         <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                         <span>🟢 EN MARCHA</span>
@@ -567,15 +594,25 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                 <div className="space-y-4">
                   {/* Fila principal del producto */}
                   <div className={cn(
-                    "rounded-2xl p-4 space-y-3 border",
-                    goldMode
+                    "rounded-2xl p-4 space-y-3 border transition-all",
+                    isFinished
+                      ? goldMode
+                        ? "bg-amber-950/30 border-amber-400/40 shadow-inner"
+                        : "bg-emerald-50 border-emerald-400 shadow-sm"
+                      : goldMode
                       ? "bg-white/[0.03] border-white/10"
                       : "bg-emerald-50/50 border-emerald-600/15"
                   )}>
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className={cn("text-[9px] uppercase font-black tracking-wider", goldMode ? "text-white/40" : "text-[#64748b]")}>
-                          🌿 ORDEN DE FABRICACIÓN ACTUAL
+                        <p className={cn("text-[9px] uppercase font-black tracking-wider flex items-center gap-1", goldMode ? "text-white/40" : "text-[#64748b]")}>
+                          {isFinished ? (
+                            <span className="text-emerald-600 font-bold flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> ORDEN FINALIZADA AL 100%
+                            </span>
+                          ) : (
+                            <span>🌿 ORDEN DE FABRICACIÓN ACTUAL</span>
+                          )}
                         </p>
                         <h4 className={cn("text-xl sm:text-2xl font-black leading-tight mt-0.5 flex items-center gap-1.5", goldMode ? "text-white" : "text-[#0f291e]")}>
                           <span>🥗</span>
@@ -613,14 +650,21 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                         <span className={goldMode ? "text-white/80" : "text-[#334155]"}>
                           📦 {item.completedBoxes} de {item.totalBoxes} cajas ({item.completedPallets} / {item.totalPallets} palets)
                         </span>
-                        <span className="font-mono text-emerald-600 font-black text-sm">{item.percent}%</span>
+                        <span className={cn("font-mono font-black text-sm", isFinished ? "text-emerald-500 text-base animate-pulse" : "text-emerald-600")}>
+                          {item.percent}%
+                        </span>
                       </div>
                       <div className={cn(
                         "h-3.5 rounded-full overflow-hidden border relative",
                         goldMode ? "bg-white/5 border-white/10" : "bg-slate-200 border-slate-300"
                       )}>
                         <div
-                          className="h-full bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-400 transition-all duration-500 rounded-full"
+                          className={cn(
+                            "h-full transition-all duration-500 rounded-full",
+                            isFinished
+                              ? "bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 animate-pulse"
+                              : "bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-400"
+                          )}
                           style={{ width: `${item.percent}%` }}
                         />
                       </div>
@@ -710,6 +754,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                         disabled={actionLoadingId === `${item.line.id}-pal` || prog.completedPallets >= totalMilagroPallets}
                         className={cn(
                           "h-10 px-2 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border shadow-sm",
+                          item.noblejasBoxes > 0 ? "col-span-1" : "col-span-1 sm:col-span-2",
                           goldMode
                             ? "bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/30 text-emerald-300"
                             : "bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white"
@@ -721,26 +766,30 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                         <span>+1 Palet Milagro</span>
                       </button>
 
-                      <button
-                        onClick={(e) => handleQuickAddNoblejasPallet(item, e)}
-                        disabled={actionLoadingId === `${item.line.id}-nob`}
-                        className={cn(
-                          "h-10 px-2 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border shadow-sm",
-                          goldMode
-                            ? "bg-purple-500/15 hover:bg-purple-500/25 border-purple-500/30 text-purple-300"
-                            : "bg-purple-600 hover:bg-purple-700 border-purple-600 text-white"
-                        )}
-                        title="Sumar +1 Palet de Noblejas a la línea"
-                        type="button"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>+1 Palet Nob</span>
-                      </button>
+                      {/* Solo mostrar botón de Noblejas si la orden TIENE cajas de Noblejas */}
+                      {item.noblejasBoxes > 0 && (
+                        <button
+                          onClick={(e) => handleQuickAddNoblejasPallet(item, e)}
+                          disabled={actionLoadingId === `${item.line.id}-nob` || (maxNobPallets > 0 && prog.noblejasCompletedPallets >= maxNobPallets)}
+                          className={cn(
+                            "h-10 px-2 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border shadow-sm",
+                            goldMode
+                              ? "bg-purple-500/15 hover:bg-purple-500/25 border-purple-500/30 text-purple-300"
+                              : "bg-purple-600 hover:bg-purple-700 border-purple-600 text-white"
+                          )}
+                          title="Sumar +1 Palet de Noblejas a la línea"
+                          type="button"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>+1 Palet Nob</span>
+                        </button>
+                      )}
 
                       <button
                         onClick={() => onSelectLine(item.line.code)}
                         className={cn(
-                          "h-10 px-2 rounded-xl border text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1 cursor-pointer col-span-2 sm:col-span-1 shadow-sm",
+                          "h-10 px-2 rounded-xl border text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1 cursor-pointer shadow-sm",
+                          item.noblejasBoxes > 0 ? "col-span-2 sm:col-span-1" : "col-span-1",
                           goldMode
                             ? "bg-white/5 hover:bg-white/10 border-white/10 text-white"
                             : "bg-white hover:bg-emerald-50 border-emerald-600/20 text-[#0f291e]"

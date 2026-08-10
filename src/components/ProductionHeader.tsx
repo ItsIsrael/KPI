@@ -226,32 +226,24 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
                 <Calculator className="w-3.5 h-3.5" />
               </button>
 
-              {/* Bloqueo Táctil de Pantalla (Glove-Lock) */}
+              {/* Modo Ambiente (Pantalla Completa TV) - Disponible en Florette y Gold */}
               <button
-                onClick={toggleScreenLock}
+                onClick={toggleAmbientMode}
                 className={cn(
-                  "h-8 w-8 border backdrop-blur-sm rounded-lg cursor-pointer transition-all active:scale-95 flex items-center justify-center shrink-0",
-                  goldMode
+                  "h-8 w-8 border backdrop-blur-sm rounded-lg cursor-pointer transition-all active:scale-95 flex items-center justify-center shrink-0 shadow-sm",
+                  ambientMode
+                    ? goldMode
+                      ? "bg-amber-500 text-black border-amber-400 font-bold"
+                      : "bg-emerald-600 text-white border-emerald-500 font-bold"
+                    : goldMode
                     ? "border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
-                    : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                    : "border-emerald-600/30 bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600/20"
                 )}
-                title="Bloqueo Táctil de Pantalla (Glove-Lock)"
+                title="Modo Ambientador / Pantalla de Fábrica"
                 type="button"
               >
-                <Lock className="w-3.5 h-3.5" />
+                <Tv className="w-3.5 h-3.5" />
               </button>
-
-              {/* Modo Ambiente (Pantalla Completa) - Solo en Modo Gold */}
-              {goldMode && (
-                <button
-                  onClick={toggleAmbientMode}
-                  className="h-8 w-8 border border-white/10 bg-white/5 hover:bg-white/10 backdrop-blur-sm text-white rounded-lg cursor-pointer transition-all active:scale-95 flex items-center justify-center shrink-0"
-                  title="Modo Ambiente"
-                  type="button"
-                >
-                  <Tv className={cn("w-3.5 h-3.5", ambientMode ? "text-amber-400" : "text-white/60")} />
-                </button>
-              )}
 
               {/* Pantalla Completa - Oculto en móviles */}
               <button

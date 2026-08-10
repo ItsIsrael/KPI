@@ -204,6 +204,7 @@ interface ProductionState {
   toggleAmbientMode: () => void; // Activar/desactivar modo pantalla completa ambientador
   setEditingQueueItemId: (id: string | null) => void;
   updateQueueItem: (id: string, updates: Partial<QueueItem>) => void;
+  updateLineItemProgress: (lineCode: string, queueItemId: string, progress: FormatProgress) => void;
 }
 
 // Helper para crear el estado inicial de progreso
@@ -1323,6 +1324,52 @@ export const useProductionStore = create<ProductionState>()(
             queueProgress: updatedQueueProgress,
           };
         }),
+
+      updateLineItemProgress: (lineCode: string, queueItemId: string, progress: FormatProgress) => {
+        const state = get();
+        const prevLineStorage = state.lineStorage[lineCode] || {
+          salads: [],
+          queue: [],
+          currentQueueIndex: 0,
+          currentProgress: null,
+          queueProgress: {},
+          isProducing: false,
+        };
+        
+        const updatedProgressMap = {
+          ...(prevLineStorage.queueProgress || {}),
+          [queueItemId]: progress,
+        };
+
+        const updatedLineState = {
+          ...prevLineStorage,
+          queueProgress: updatedProgressMap,
+          currentProgress: (prevLineStorage.queue[prevLineStorage.currentQueueIndex]?.id === queueItemId)
+            ? progress
+            : prevLineStorage.currentProgress,
+        };
+
+        const isCurrentActiveLine = state.activeLineCode === lineCode;
+
+        set((s) => ({
+          lineStorage: {
+            ...s.lineStorage,
+            [lineCode]: updatedLineState,
+          },
+          ...(isCurrentActiveLine ? {
+            queueProgress: {
+              ...(s.queueProgress || {}),
+              [queueItemId]: progress,
+            },
+            currentProgress: (s.queue[s.currentQueueIndex]?.id === queueItemId)
+              ? progress
+              : s.currentProgress,
+          } : {}),
+        }));
+
+        syncProgress(queueItemId, progress);
+        broadcastLocalChange(lineCode);
+      },
     }),
     {
       name: "salad-production-storage",
