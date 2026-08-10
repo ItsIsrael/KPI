@@ -232,7 +232,7 @@ export function ProductionQueue({ editable = false }: ProductionQueueProps) {
                           : "text-white"
                       }`}
                     >
-                      <span>{item.saladName}</span>
+                      <span>🥗 {item.saladName}</span>
                       {item.saladName.toUpperCase().includes("PROMO") && !isDone && (
                         <span className="inline-flex items-center bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider animate-pulse shrink-0">
                           FILM PROMO
@@ -244,12 +244,12 @@ export function ProductionQueue({ editable = false }: ProductionQueueProps) {
                           isDone ? "text-white/20" : "text-white/60"
                         }
                       >
-                        {item.boxType}
+                        📦 {item.boxType}
                       </span>
                     </p>
                     <p className="text-xs text-white/30 mt-0.5 flex items-center gap-1.5 flex-wrap">
                       <span>
-                        <span className={cn("font-black", isDone ? "text-white/20" : "text-white/50")}>{item.quantity} cajas</span> ({calc.pallets}p + {calc.pico}c)
+                        <span className={cn("font-black", isDone ? "text-white/20" : "text-white/50")}>📦 {item.quantity} cajas</span> ({calc.pallets}p + {calc.pico}c)
                         {item.noblejas > 0 && ` | Nob: ${item.noblejas}c`}
                       </span>
                       {activeLote && (
@@ -259,14 +259,14 @@ export function ProductionQueue({ editable = false }: ProductionQueueProps) {
                             ? "bg-purple-500/20 text-purple-300 border border-purple-500/35 animate-pulse shadow-[0_0_8px_rgba(168,85,247,0.2)]"
                             : "bg-white/5 text-white/40 border border-white/5"
                         )}>
-                          Lote: {activeLote}
+                          🏷️ Lote: {activeLote}
                         </span>
                       )}
                     </p>
                     {goldMode && item.note && (
-                      <p className="text-[10px] text-amber-400 font-bold mt-1 flex items-center gap-1">
+                      <p className="text-[11px] text-amber-300/80 mt-1 font-semibold flex items-center gap-1">
                         <span>Alerta:</span>
-                        <span className="truncate max-w-[220px]">{item.note}</span>
+                        <span>{item.note}</span>
                       </p>
                     )}
                   </div>
@@ -283,7 +283,7 @@ export function ProductionQueue({ editable = false }: ProductionQueueProps) {
                           id={`queue-edit-${index}`}
                           title="Editar formato"
                         >
-                          Editar
+                          ✏️ Editar
                         </button>
                       )}
 

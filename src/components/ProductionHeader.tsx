@@ -114,25 +114,27 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
               </button>
               
               <h1 className="text-base sm:text-lg md:text-xl font-black tracking-wide flex items-center gap-1.5 flex-wrap text-foreground">
+                <span className="shrink-0">🥗</span>
                 <span className={cn("truncate max-w-[100px] xs:max-w-[160px] sm:max-w-none shrink-0", goldMode && "text-gold-gradient")}>
                   {current.saladName}
                 </span>
                 <span className="opacity-30 font-normal shrink-0">|</span>
+                <span className="shrink-0">📦</span>
                 <span className={cn("font-bold truncate max-w-[70px] xs:max-w-[110px] sm:max-w-none shrink-0", goldMode ? "text-amber-400" : "text-emerald-600 dark:text-emerald-400")}>
                   {current.boxType}
                 </span>
                 {goldMode && getActiveLote(queue, currentQueueIndex) && (
                   <span className="text-[9px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/35 px-1.5 py-0.5 rounded-lg shrink-0">
-                    Lote: {getActiveLote(queue, currentQueueIndex)}
+                    🏷️ Lote: {getActiveLote(queue, currentQueueIndex)}
                   </span>
                 )}
                 {goldMode ? (
                   <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-[0_0_10px_rgba(245,158,11,0.5)] tracking-wider uppercase shrink-0">
-                    GOLD
+                    👑 GOLD
                   </span>
                 ) : (
                   <span className="bg-emerald-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-sm tracking-wider uppercase shrink-0">
-                    FLORETTE
+                    🌿 FLORETTE
                   </span>
                 )}
               </h1>

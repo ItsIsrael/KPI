@@ -473,17 +473,47 @@ export const useProductionStore = create<ProductionState>()(
           }
           broadcastLocalChange(lineCodeToUse);
         } else {
-          // Guardar en la línea objetivo
+          // Guardar en la línea objetivo tanto en memoria local como en Supabase
+          const prevTargetStorage = state.lineStorage[lineCodeToUse] || {
+            salads: [],
+            queue: [],
+            currentQueueIndex: 0,
+            currentProgress: null,
+            queueProgress: {},
+            isProducing: false,
+          };
+          const targetQueue = [...prevTargetStorage.queue, ...newQueueItems];
+          const targetSalads = [...prevTargetStorage.salads, salad];
+          const targetProgressMap: Record<string, FormatProgress> = { ...(prevTargetStorage.queueProgress || {}) };
+          newQueueItems.forEach((item) => {
+            if (!targetProgressMap[item.id]) {
+              targetProgressMap[item.id] = createInitialProgress(item.id);
+            }
+          });
+          const firstItem = targetQueue[0];
+          const targetCurrentProgress = firstItem ? targetProgressMap[firstItem.id] || createInitialProgress(firstItem.id) : null;
+
+          const targetLineState = {
+            salads: targetSalads,
+            queue: targetQueue,
+            currentQueueIndex: 0,
+            currentProgress: targetCurrentProgress,
+            queueProgress: targetProgressMap,
+            isProducing: true,
+          };
+
+          set((s) => ({
+            lineStorage: {
+              ...s.lineStorage,
+              [lineCodeToUse]: targetLineState,
+            },
+          }));
+
           if (lineIdToUse) {
-            const data = await fetchLineData(lineIdToUse);
-            const targetQueue = [...data.queue, ...newQueueItems];
             await syncQueueItems(lineIdToUse, targetQueue);
-            if (!data.isProducing || data.queue.length === 0) {
-              await syncLineState(lineIdToUse, true, 0);
-              const firstItem = targetQueue[0];
-              if (firstItem) {
-                await syncProgress(firstItem.id, createInitialProgress(firstItem.id));
-              }
+            await syncLineState(lineIdToUse, true, 0);
+            if (firstItem && targetCurrentProgress) {
+              await syncProgress(firstItem.id, targetCurrentProgress);
             }
           }
           broadcastLocalChange(lineCodeToUse);
