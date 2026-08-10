@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { LineOverview, FormatProgress } from "@/types/types";
-import { calculateFormat } from "@/types/types";
-import { getFactoryOverview, syncProgress, syncLineState } from "@/lib/supabase-service";
+import type { LineOverview, FormatProgress, Salad, QueueItem, HistoryItem } from "@/types/types";
+import { calculateFormat, DEFAULT_BOX_TYPES, generateId } from "@/types/types";
+import { getFactoryOverview, syncProgress, syncLineState, syncQueueItems, saveHistoryLog } from "@/lib/supabase-service";
 import { testSupabaseConnection, type SupabaseTestResult } from "@/lib/supabase-test";
 import { useProductionStore } from "@/store/production-store";
 import { cn } from "@/lib/utils";
@@ -13,15 +13,17 @@ import {
   RefreshCw, 
   Wifi, 
   WifiOff, 
-  Pause, 
-  Play,
   Plus, 
   ArrowRight, 
   ChevronRight,
-  Layers,
   CheckCircle2,
   Trophy,
-  Zap
+  Zap,
+  Clock,
+  Sparkles,
+  Bell,
+  Trash2,
+  X
 } from "lucide-react";
 
 interface MultiLineDashboardProps {
@@ -31,22 +33,39 @@ interface MultiLineDashboardProps {
 
 type ViewMode = "ALL" | "PAIR_01" | "PAIR_23" | "CUSTOM";
 
+const QUICK_SALADS = [
+  "César",
+  "César American",
+  "Pasta y Rúcula",
+  "Gourmet",
+  "Pasta y Atún",
+  "Japón",
+  "Digestiva",
+  "Wraps",
+];
+
 export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboardProps) {
   const [overview, setOverview] = useState<LineOverview[]>([]);
   const [loading, setLoading] = useState(true);
-  // Por defecto mostramos las 4 líneas si no se especifica otra vista
   const [viewMode, setViewMode] = useState<ViewMode>("ALL");
   const [customSelectedLines, setCustomSelectedLines] = useState<string[]>(["K00", "K01"]);
   const [connectionTest, setConnectionTest] = useState<SupabaseTestResult | null>(null);
   const [isTestingConn, setIsTestingConn] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
+  // Modal para Cargar Ensalada Rápida directamente desde el Dashboard
+  const [quickAddLineCode, setQuickAddLineCode] = useState<string | null>(null);
+  const [modalSaladName, setModalSaladName] = useState<string>("César");
+  const [modalBoxType, setModalBoxType] = useState<string>("Cartón 4");
+  const [modalBoxes, setModalBoxes] = useState<string>("144");
+  const [modalNoblejas, setModalNoblejas] = useState<string>("0");
+  const [modalLote, setModalLote] = useState<string>("");
+
   const fetchOverview = async () => {
     try {
       const data = await getFactoryOverview();
       const localStore = useProductionStore.getState();
 
-      // Fusionar inteligentemente con lineStorage local
       const merged = data.map((o) => {
         const local = localStore.lineStorage[o.line.code];
         if (local && local.queue && local.queue.length > 0) {
@@ -54,7 +73,6 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           const localProg = currentItem ? local.queueProgress[currentItem.id] : undefined;
           const dbProg = o.progress;
 
-          // Seleccionar el progreso más avanzado (optimista / local)
           const prog = (localProg && (!dbProg || localProg.completedPallets >= (dbProg.completedPallets || 0)))
             ? localProg
             : (dbProg || localProg);
@@ -126,11 +144,11 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
   useEffect(() => {
     fetchOverview();
     handleTestConnection();
-    const interval = setInterval(fetchOverview, 3000); // Refresco en vivo constante
+    const interval = setInterval(fetchOverview, 3000);
     return () => clearInterval(interval);
   }, []);
 
-  // Quick Action Dinámica Milagro: Avanza Palet o Pico según corresponda
+  // Quick Action Dinámica Milagro: Avanza Palet o Pico
   const handleQuickMilagroAction = async (item: LineOverview, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!item.currentItem || !item.calc) return;
@@ -173,10 +191,8 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
       palletLastUpdated: Date.now(),
     };
 
-    // 1. Actualización en Store global (incluye lineStorage local)
     useProductionStore.getState().updateLineItemProgress(item.line.code, item.currentItem.id, updatedProg);
 
-    // 2. Actualización optimista inmediata en UI
     setOverview((prev) =>
       prev.map((o) => {
         if (o.line.id !== item.line.id) return o;
@@ -191,12 +207,11 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
       })
     );
 
-    // 3. Sincronización asíncrona con Supabase
     await syncProgress(item.currentItem.id, updatedProg);
     setActionLoadingId(null);
   };
 
-  // Quick Action Dinámica Noblejas: Avanza Palet o Pico de Noblejas
+  // Quick Action Dinámica Noblejas
   const handleQuickNoblejasAction = async (item: LineOverview, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!item.currentItem || item.noblejasBoxes <= 0) return;
@@ -242,10 +257,8 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
       palletLastUpdated: Date.now(),
     };
 
-    // 1. Actualización en Store global
     useProductionStore.getState().updateLineItemProgress(item.line.code, item.currentItem.id, updatedProg);
 
-    // 2. Actualización optimista en UI
     setOverview((prev) =>
       prev.map((o) => {
         if (o.line.id !== item.line.id) return o;
@@ -260,26 +273,163 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
       })
     );
 
-    // 3. Sincronización con Supabase
     await syncProgress(item.currentItem.id, updatedProg);
     setActionLoadingId(null);
   };
 
-  // Quick Action: Alternar Producción / Pausa de la Línea
-  const handleToggleLineProducing = async (item: LineOverview, e: React.MouseEvent) => {
+  // Quick Action: Finalizar Formato y Limpiar Línea directamente desde el Dashboard
+  const handleFinalizeAndCleanLine = async (item: LineOverview, e: React.MouseEvent) => {
     e.stopPropagation();
-    const hasActiveOrders = item.queueLength > 0 && !!item.currentSaladName;
-    if (!hasActiveOrders) return; // Si no hay órdenes, no se puede iniciar
+    if (!item.currentItem) return;
 
-    const nextProducing = !item.line.isProducing;
+    setActionLoadingId(`${item.line.id}-fin`);
+
+    const historyItem: HistoryItem = {
+      id: item.currentItem.id + "-" + Date.now(),
+      saladName: item.currentItem.saladName,
+      boxType: item.currentItem.boxType,
+      quantity: item.currentItem.quantity,
+      noblejas: item.currentItem.noblejas,
+      boxesPerPallet: item.currentItem.boxesPerPallet,
+      date: new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) + " " + new Date().toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit" }),
+      duration: "Completado en Dashboard",
+    };
+
+    // Guardar en log de historial
+    await saveHistoryLog(item.line.id, historyItem);
+
+    // Limpiar estado en memoria local y store
+    const emptyState = {
+      salads: [],
+      queue: [],
+      currentQueueIndex: 0,
+      currentProgress: null,
+      queueProgress: {},
+      isProducing: false,
+      formatStartTime: null,
+      palletSpeeds: [],
+    };
+
+    const store = useProductionStore.getState();
+    useProductionStore.setState((s) => ({
+      lineStorage: {
+        ...s.lineStorage,
+        [item.line.code]: emptyState,
+      },
+      history: [historyItem, ...(s.history || [])].slice(0, 30),
+      ...(s.activeLineCode === item.line.code ? emptyState : {}),
+    }));
+
+    // Sincronizar con Supabase
+    await syncLineState(item.line.id, false, 0);
+    await syncQueueItems(item.line.id, []);
+
+    // Actualizar UI inmediatamente
     setOverview((prev) =>
-      prev.map((o) =>
-        o.line.id === item.line.id
-          ? { ...o, line: { ...o.line, isProducing: nextProducing } }
-          : o
-      )
+      prev.map((o) => {
+        if (o.line.id !== item.line.id) return o;
+        return {
+          ...o,
+          currentSaladName: undefined,
+          currentBoxType: undefined,
+          currentLote: undefined,
+          totalBoxes: 0,
+          completedBoxes: 0,
+          totalPallets: 0,
+          completedPallets: 0,
+          noblejasBoxes: 0,
+          noblejasDoneBoxes: 0,
+          percent: 0,
+          queueLength: 0,
+          pendingCount: 0,
+          currentItem: undefined,
+          nextItem: undefined,
+          calc: undefined,
+          progress: undefined,
+          queue: [],
+          line: { ...o.line, isProducing: false },
+        };
+      })
     );
-    await syncLineState(item.line.id, nextProducing, item.line.currentQueueIndex);
+
+    setActionLoadingId(null);
+  };
+
+  // Quick Action: Cargar Ensalada Rápida desde Modal
+  const handleQuickAddSubmit = async () => {
+    if (!quickAddLineCode) return;
+    const targetLine = overview.find((o) => o.line.code === quickAddLineCode);
+    if (!targetLine) return;
+
+    const boxConfig = DEFAULT_BOX_TYPES.find((b) => b.name === modalBoxType) || DEFAULT_BOX_TYPES[0];
+    const totalQty = parseInt(modalBoxes, 10) || 144;
+    const nobQty = parseInt(modalNoblejas, 10) || 0;
+
+    const newFormat = {
+      id: generateId(),
+      boxType: boxConfig.name,
+      quantity: totalQty,
+      noblejas: nobQty,
+      boxesPerPallet: boxConfig.defaultBoxesPerPallet,
+      lote: modalLote || undefined,
+      linea: quickAddLineCode,
+    };
+
+    const newSalad: Salad = {
+      id: generateId(),
+      name: modalSaladName,
+      formats: [newFormat],
+    };
+
+    const newQueueItem: QueueItem = {
+      id: generateId(),
+      saladId: newSalad.id,
+      saladName: newSalad.name,
+      formatId: newFormat.id,
+      boxType: newFormat.boxType,
+      quantity: newFormat.quantity,
+      noblejas: newFormat.noblejas,
+      boxesPerPallet: newFormat.boxesPerPallet,
+      lote: newFormat.lote,
+      linea: quickAddLineCode,
+    };
+
+    const initialProg: FormatProgress = {
+      queueItemId: newQueueItem.id,
+      completedPallets: 0,
+      picoCompleted: false,
+      noblejasCompleted: false,
+      noblejasCompletedPallets: 0,
+      nobjelasPicoCompleted: false,
+      finished: false,
+      boxesAdjustment: 0,
+    };
+
+    const lineState = {
+      salads: [newSalad],
+      queue: [newQueueItem],
+      currentQueueIndex: 0,
+      currentProgress: initialProg,
+      queueProgress: { [newQueueItem.id]: initialProg },
+      isProducing: true,
+      formatStartTime: Date.now(),
+      palletSpeeds: [],
+    };
+
+    useProductionStore.setState((s) => ({
+      lineStorage: {
+        ...s.lineStorage,
+        [quickAddLineCode]: lineState,
+      },
+      ...(s.activeLineCode === quickAddLineCode ? lineState : {}),
+    }));
+
+    await syncQueueItems(targetLine.line.id, [newQueueItem]);
+    await syncLineState(targetLine.line.id, true, 0);
+    await syncProgress(newQueueItem.id, initialProg);
+
+    setQuickAddLineCode(null);
+    fetchOverview();
   };
 
   const totalBoxesPlant = overview.reduce((acc, o) => acc + o.totalBoxes, 0);
@@ -298,7 +448,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto px-2 sm:px-4 py-3">
-      {/* Cabecera del Monitor de Planta Adaptable a Tema Claro / Gold */}
+      {/* Cabecera del Monitor de Planta */}
       <div className={cn(
         "glass-card rounded-3xl p-4 sm:p-6 border relative overflow-hidden transition-all shadow-2xl space-y-4",
         goldMode
@@ -318,7 +468,6 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                 <span>🌿 Sala de Control y Monitorización</span>
               </span>
 
-              {/* Indicador de Supabase Realtime */}
               {connectionTest && (
                 <span className={cn(
                   "text-[10px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 transition-all shadow-sm",
@@ -349,7 +498,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
               </span>
             </h2>
             <p className={cn("text-xs", goldMode ? "text-white/50" : "text-[#475569]")}>
-              Control simultáneo, avance de palets, picos y seguimiento de lotes en directo
+              Control en vivo, avance de palets, picos y alertas de cadencia en directo
             </p>
           </div>
 
@@ -357,9 +506,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           <div className="flex items-center gap-2.5 flex-wrap">
             <div className={cn(
               "rounded-2xl px-3.5 py-2 text-center min-w-[95px] border shadow-sm",
-              goldMode
-                ? "bg-white/5 border-white/10"
-                : "bg-emerald-50/70 border-emerald-600/15"
+              goldMode ? "bg-white/5 border-white/10" : "bg-emerald-50/70 border-emerald-600/15"
             )}>
               <p className={cn("text-[9px] uppercase font-bold tracking-wider", goldMode ? "text-white/40" : "text-[#64748b]")}>
                 Líneas Activas
@@ -371,9 +518,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
 
             <div className={cn(
               "rounded-2xl px-3.5 py-2 text-center min-w-[110px] border shadow-sm",
-              goldMode
-                ? "bg-white/5 border-white/10"
-                : "bg-emerald-50/70 border-emerald-600/15"
+              goldMode ? "bg-white/5 border-white/10" : "bg-emerald-50/70 border-emerald-600/15"
             )}>
               <p className={cn("text-[9px] uppercase font-bold tracking-wider", goldMode ? "text-white/40" : "text-[#64748b]")}>
                 📦 Cajas en Planta
@@ -404,7 +549,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           </div>
         </div>
 
-        {/* Barra de Filtros: Todas vs Parejas */}
+        {/* Barra de Filtros */}
         <div className={cn(
           "pt-3.5 border-t flex items-center justify-between flex-wrap gap-2.5",
           goldMode ? "border-white/10" : "border-emerald-600/10"
@@ -512,7 +657,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
         </div>
       </div>
 
-      {/* Grid de Líneas de Producción (Alta Densidad y Detalle Dinámico) */}
+      {/* Grid de Líneas de Producción */}
       <div className={cn(
         "grid gap-5",
         isDuoView ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-2"
@@ -536,12 +681,17 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           const maxNobPallets = currentItem && item.noblejasBoxes > 0 ? Math.floor(item.noblejasBoxes / currentItem.boxesPerPallet) : 0;
           const nobjelasPicoCajas = currentItem && item.noblejasBoxes > 0 ? (item.noblejasBoxes % currentItem.boxesPerPallet) : 0;
 
-          // Estado dinámico automático: detecta finalizado, en marcha o en espera
+          // Estado dinámico y 100% reactivo
           const hasActiveOrders = item.queueLength > 0 && !!item.currentSaladName;
           const isFinished = hasActiveOrders && (item.percent >= 100 || prog.finished);
           const isProducing = item.line.isProducing && hasActiveOrders && !isFinished;
 
-          // Flags dinámicos para botones de acción rápida
+          // Recordatorio inteligente de palet (> 5 min sin registrar palet en marcha)
+          const now = Date.now();
+          const lastUpdated = prog.palletLastUpdated || prog.lastPalletTimestamp || 0;
+          const minutesSinceLastPallet = lastUpdated > 0 ? Math.floor((now - lastUpdated) / 60000) : 0;
+          const showPalletCadenceReminder = isProducing && minutesSinceLastPallet >= 5;
+
           const hasMilagroPalletsLeft = prog.completedPallets < totalMilagroPallets;
           const hasMilagroPicoLeft = milagroPicoCajas > 0 && !prog.picoCompleted;
           const isMilagroDone = !hasMilagroPalletsLeft && !hasMilagroPicoLeft;
@@ -564,7 +714,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                 isDuoView && "p-6 sm:p-7"
               )}
             >
-              {/* Encabezado de la Línea */}
+              {/* Encabezado de la Línea con Badge Reactivo Limpio */}
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-3">
                   <span className={cn(
@@ -588,54 +738,42 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                   </div>
                 </div>
 
-                {/* Botón de Estado Dinámico de la Línea (Detecta Finalizado) */}
+                {/* Badge Reactivo Automático (Sin doble punto y sin acción manual forzada) */}
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={(e) => handleToggleLineProducing(item, e)}
-                    disabled={!hasActiveOrders}
+                  <div
                     className={cn(
-                      "h-8 px-2.5 rounded-xl border text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 disabled:cursor-default shadow-sm",
+                      "h-8 px-3 rounded-xl border text-[11px] font-black uppercase tracking-wider flex items-center gap-2 shadow-sm select-none",
                       isFinished
                         ? goldMode
                           ? "bg-amber-500/25 border-amber-400 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.3)] animate-pulse"
                           : "bg-emerald-500 text-white border-emerald-600 shadow-md shadow-emerald-500/30"
                         : isProducing
                         ? goldMode
-                          ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25"
-                          : "bg-emerald-100 border-emerald-300 text-emerald-800 hover:bg-emerald-200"
-                        : hasActiveOrders
-                        ? goldMode
-                          ? "bg-white/5 border-white/10 text-white/40"
-                          : "bg-slate-100 border-slate-200 text-slate-500"
-                        : goldMode
-                        ? "bg-white/5 border-white/10 text-white/40"
+                          ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+                          : "bg-emerald-100 border-emerald-300 text-emerald-800"
                         : "bg-slate-100 border-slate-200 text-slate-500"
                     )}
-                    title={hasActiveOrders ? (isFinished ? "Formato completado al 100%" : isProducing ? "Pausar línea" : "Iniciar producción") : "Sin órdenes activas"}
-                    type="button"
                   >
                     {isFinished ? (
                       <>
-                        <Trophy className="w-3.5 h-3.5 animate-bounce" />
-                        <span>🏆 FINALIZADO</span>
+                        <Trophy className="w-3.5 h-3.5 text-amber-300 animate-bounce" />
+                        <span>FINALIZADO</span>
                       </>
                     ) : isProducing ? (
                       <>
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <span>🟢 EN MARCHA</span>
-                      </>
-                    ) : hasActiveOrders ? (
-                      <>
-                        <Pause className="w-3 h-3 opacity-60" />
-                        <span>⏸️ EN PAUSA</span>
+                        <span className="relative flex h-2.5 w-2.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                        </span>
+                        <span>EN MARCHA</span>
                       </>
                     ) : (
                       <>
-                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                        <span>⚪ EN ESPERA</span>
+                        <span className="w-2 h-2 rounded-full bg-slate-400" />
+                        <span>EN ESPERA</span>
                       </>
                     )}
-                  </button>
+                  </div>
                 </div>
               </div>
 
@@ -680,11 +818,6 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                           {milagroPicoCajas > 0 && (
                             <span className={cn("text-[11px] font-mono px-2 py-0.5 rounded-lg border", goldMode ? "bg-amber-500/10 border-amber-500/20 text-amber-300" : "bg-emerald-50 border-emerald-200 text-emerald-700")}>
                               Pico Milagro: {milagroPicoCajas}c
-                            </span>
-                          )}
-                          {item.currentItem?.fechaCaducidad && (
-                            <span className={cn("text-[11px] font-mono px-2 py-0.5 rounded-lg border", goldMode ? "bg-white/5 border-white/10 text-white/60" : "bg-slate-50 border-slate-200 text-slate-600")}>
-                              Cad: {item.currentItem.fechaCaducidad}
                             </span>
                           )}
                         </div>
@@ -733,7 +866,21 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                       </div>
                     </div>
 
-                    {/* Matriz Visual de Palets en Vivo (Incluye Celda de Pico) */}
+                    {/* Recordatorio de Cadencia de Palet */}
+                    {showPalletCadenceReminder && (
+                      <div className={cn(
+                        "p-2.5 rounded-xl border flex items-center justify-between text-xs animate-pulse",
+                        goldMode ? "bg-amber-500/15 border-amber-500/40 text-amber-200" : "bg-amber-50 border-amber-300 text-amber-800"
+                      )}>
+                        <div className="flex items-center gap-2">
+                          <Bell className="w-4 h-4 text-amber-500 shrink-0" />
+                          <span className="font-bold">Hace {minutesSinceLastPallet} min del último palet. ¿Completaste uno?</span>
+                        </div>
+                        <span className="font-mono text-[10px] underline">Pulsa +1 Palet</span>
+                      </div>
+                    )}
+
+                    {/* Matriz Visual de Palets en Vivo */}
                     {(isDuoView || totalMilagroPallets > 0) && (
                       <div className={cn("pt-2 border-t space-y-1.5", goldMode ? "border-white/5" : "border-emerald-600/10")}>
                         <div className="flex items-center justify-between text-xs">
@@ -774,7 +921,6 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                             );
                           })}
 
-                          {/* Celda visual de Pico Milagro */}
                           {milagroPicoCajas > 0 && (
                             <div
                               className={cn(
@@ -799,7 +945,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                       </div>
                     )}
 
-                    {/* Desglose y Matriz de Noblejas con Pico */}
+                    {/* Desglose y Matriz de Noblejas */}
                     {item.noblejasBoxes > 0 && (
                       <div className={cn("pt-2 border-t space-y-1.5", goldMode ? "border-white/5" : "border-emerald-600/10")}>
                         <div className="flex items-center justify-between text-xs text-purple-600">
@@ -856,107 +1002,122 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                     )}
                   </div>
 
-                  {/* Botones de Acción Rápida Dinámicos (Cambian a Pico automáticamente) */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    <button
-                      onClick={(e) => handleQuickMilagroAction(item, e)}
-                      disabled={actionLoadingId === `${item.line.id}-mil` || isMilagroDone}
-                      className={cn(
-                        "h-10 px-2 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border shadow-sm",
-                        item.noblejasBoxes > 0 ? "col-span-1" : "col-span-1 sm:col-span-2",
-                        hasMilagroPalletsLeft
-                          ? goldMode
-                            ? "bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/30 text-emerald-300"
-                            : "bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white"
-                          : hasMilagroPicoLeft
-                          ? goldMode
-                            ? "bg-amber-500/25 hover:bg-amber-500/35 border-amber-400 text-amber-200 animate-pulse font-black"
-                            : "bg-amber-600 hover:bg-amber-700 border-amber-600 text-white animate-pulse font-black"
-                          : "bg-slate-200 border-slate-300 text-slate-500"
-                      )}
-                      title={hasMilagroPalletsLeft ? "Marcar +1 Palet Milagro" : hasMilagroPicoLeft ? "Marcar Pico Milagro completado" : "Milagro completado"}
-                      type="button"
-                    >
-                      {hasMilagroPalletsLeft ? (
-                        <>
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>+1 Palet Milagro</span>
-                        </>
-                      ) : hasMilagroPicoLeft ? (
-                        <>
-                          <Zap className="w-3.5 h-3.5 text-amber-300" />
-                          <span>+ Pico ({milagroPicoCajas}c)</span>
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Milagro OK</span>
-                        </>
-                      )}
-                    </button>
-
-                    {/* Solo mostrar botón de Noblejas si la orden TIENE cajas de Noblejas */}
-                    {item.noblejasBoxes > 0 && (
+                  {/* Botones de Acción Rápida Directos desde Dashboard */}
+                  <div className="space-y-2">
+                    {/* Si está finalizado, mostrar botón de Limpieza y Finalización directa */}
+                    {isFinished ? (
                       <button
-                        onClick={(e) => handleQuickNoblejasAction(item, e)}
-                        disabled={actionLoadingId === `${item.line.id}-nob` || isNobDone}
+                        onClick={(e) => handleFinalizeAndCleanLine(item, e)}
+                        disabled={actionLoadingId === `${item.line.id}-fin`}
                         className={cn(
-                          "h-10 px-2 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border shadow-sm",
-                          hasNobPalletsLeft
-                            ? goldMode
-                              ? "bg-purple-500/15 hover:bg-purple-500/25 border-purple-500/30 text-purple-300"
-                              : "bg-purple-600 hover:bg-purple-700 border-purple-600 text-white"
-                            : hasNobPicoLeft
-                            ? goldMode
-                              ? "bg-purple-500/30 hover:bg-purple-500/40 border-purple-400 text-purple-200 animate-pulse font-black"
-                              : "bg-purple-700 hover:bg-purple-800 border-purple-700 text-white animate-pulse font-black"
-                            : "bg-slate-200 border-slate-300 text-slate-500"
+                          "w-full h-12 rounded-2xl text-xs font-black transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/20 border animate-bounce",
+                          goldMode
+                            ? "bg-gradient-to-r from-amber-500 to-yellow-400 text-black border-amber-400"
+                            : "bg-gradient-to-r from-emerald-600 to-teal-500 text-white border-emerald-500"
                         )}
-                        title={hasNobPalletsLeft ? "Sumar +1 Palet de Noblejas" : hasNobPicoLeft ? "Marcar Pico Noblejas completado" : "Noblejas completado"}
                         type="button"
                       >
-                        {hasNobPalletsLeft ? (
-                          <>
-                            <Plus className="w-3.5 h-3.5" />
-                            <span>+1 Palet Nob</span>
-                          </>
-                        ) : hasNobPicoLeft ? (
-                          <>
-                            <Zap className="w-3.5 h-3.5" />
-                            <span>+ Pico Nob ({nobjelasPicoCajas}c)</span>
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Nob OK</span>
-                          </>
-                        )}
+                        <Trophy className="w-4 h-4" />
+                        <span>🎉 FINALIZAR ORDEN Y LIMPIAR LÍNEA</span>
                       </button>
-                    )}
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        <button
+                          onClick={(e) => handleQuickMilagroAction(item, e)}
+                          disabled={actionLoadingId === `${item.line.id}-mil` || isMilagroDone}
+                          className={cn(
+                            "h-10 px-2 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border shadow-sm",
+                            item.noblejasBoxes > 0 ? "col-span-1" : "col-span-1 sm:col-span-2",
+                            hasMilagroPalletsLeft
+                              ? goldMode
+                                ? "bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/30 text-emerald-300"
+                                : "bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white"
+                              : hasMilagroPicoLeft
+                              ? goldMode
+                                ? "bg-amber-500/25 hover:bg-amber-500/35 border-amber-400 text-amber-200 animate-pulse font-black"
+                                : "bg-amber-600 hover:bg-amber-700 border-amber-600 text-white animate-pulse font-black"
+                              : "bg-slate-200 border-slate-300 text-slate-500"
+                          )}
+                          type="button"
+                        >
+                          {hasMilagroPalletsLeft ? (
+                            <>
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>+1 Palet Milagro</span>
+                            </>
+                          ) : hasMilagroPicoLeft ? (
+                            <>
+                              <Zap className="w-3.5 h-3.5 text-amber-300" />
+                              <span>+ Pico ({milagroPicoCajas}c)</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Milagro OK</span>
+                            </>
+                          )}
+                        </button>
 
-                    <button
-                      onClick={() => onSelectLine(item.line.code)}
-                      className={cn(
-                        "h-10 px-2 rounded-xl border text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1 cursor-pointer shadow-sm",
-                        item.noblejasBoxes > 0 ? "col-span-2 sm:col-span-1" : "col-span-1",
-                        goldMode
-                          ? "bg-white/5 hover:bg-white/10 border-white/10 text-white"
-                          : "bg-white hover:bg-emerald-50 border-emerald-600/20 text-[#0f291e]"
-                      )}
-                      type="button"
-                    >
-                      <span>✏️ Abrir Panel</span>
-                      <ChevronRight className="w-3.5 h-3.5 opacity-60" />
-                    </button>
+                        {item.noblejasBoxes > 0 && (
+                          <button
+                            onClick={(e) => handleQuickNoblejasAction(item, e)}
+                            disabled={actionLoadingId === `${item.line.id}-nob` || isNobDone}
+                            className={cn(
+                              "h-10 px-2 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed border shadow-sm",
+                              hasNobPalletsLeft
+                                ? goldMode
+                                  ? "bg-purple-500/15 hover:bg-purple-500/25 border-purple-500/30 text-purple-300"
+                                  : "bg-purple-600 hover:bg-purple-700 border-purple-600 text-white"
+                                : hasNobPicoLeft
+                                ? goldMode
+                                  ? "bg-purple-500/30 hover:bg-purple-500/40 border-purple-400 text-purple-200 animate-pulse font-black"
+                                  : "bg-purple-700 hover:bg-purple-800 border-purple-700 text-white animate-pulse font-black"
+                                : "bg-slate-200 border-slate-300 text-slate-500"
+                            )}
+                            type="button"
+                          >
+                            {hasNobPalletsLeft ? (
+                              <>
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>+1 Palet Nob</span>
+                              </>
+                            ) : hasNobPicoLeft ? (
+                              <>
+                                <Zap className="w-3.5 h-3.5" />
+                                <span>+ Pico Nob ({nobjelasPicoCajas}c)</span>
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Nob OK</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => onSelectLine(item.line.code)}
+                          className={cn(
+                            "h-10 px-2 rounded-xl border text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1 cursor-pointer shadow-sm",
+                            item.noblejasBoxes > 0 ? "col-span-2 sm:col-span-1" : "col-span-1",
+                            goldMode
+                              ? "bg-white/5 hover:bg-white/10 border-white/10 text-white"
+                              : "bg-white hover:bg-emerald-50 border-emerald-600/20 text-[#0f291e]"
+                          )}
+                          type="button"
+                        >
+                          <span>✏️ Abrir Panel</span>
+                          <ChevronRight className="w-3.5 h-3.5 opacity-60" />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Siguiente Orden en Cola si existe */}
                   {item.nextItem && isDuoView && (
                     <div className={cn(
                       "border rounded-2xl p-3 flex items-center justify-between text-xs",
-                      goldMode
-                        ? "bg-white/[0.01] border-white/5"
-                        : "bg-emerald-50/40 border-emerald-600/15"
+                      goldMode ? "bg-white/[0.01] border-white/5" : "bg-emerald-50/40 border-emerald-600/15"
                     )}>
                       <div className="flex items-center gap-2">
                         <span className={cn("text-[10px] font-black uppercase tracking-wider", goldMode ? "text-white/40" : "text-[#64748b]")}>
@@ -970,18 +1131,33 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                   )}
                 </div>
               ) : (
+                /* Estado vacío con botón rápido de carga directa */
                 <div className={cn(
-                  "border border-dashed rounded-2xl p-8 text-center space-y-2",
-                  goldMode
-                    ? "bg-white/[0.02] border-white/10"
-                    : "bg-slate-50/70 border-slate-300"
+                  "border border-dashed rounded-2xl p-6 sm:p-8 text-center space-y-3",
+                  goldMode ? "bg-white/[0.02] border-white/10" : "bg-slate-50/70 border-slate-300"
                 )}>
                   <p className={cn("text-sm font-bold", goldMode ? "text-white/60" : "text-[#334155]")}>
                     ⚪ Línea sin órdenes activas
                   </p>
                   <p className={cn("text-xs", goldMode ? "text-white/40" : "text-[#64748b]")}>
-                    Haz clic para abrir el planificador y cargar ensaladas en {item.line.code}
+                    Inicia una orden directamente en {item.line.code} con 1 clic:
                   </p>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setQuickAddLineCode(item.line.code);
+                    }}
+                    className={cn(
+                      "px-4 py-2.5 rounded-xl text-xs font-black transition-all active:scale-95 inline-flex items-center gap-2 cursor-pointer shadow-md",
+                      goldMode
+                        ? "bg-amber-500 text-black hover:bg-amber-400"
+                        : "bg-emerald-600 text-white hover:bg-emerald-700"
+                    )}
+                    type="button"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>⚡ Cargar Ensalada Rápida en {item.line.code}</span>
+                  </button>
                 </div>
               )}
 
@@ -999,6 +1175,152 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           );
         })}
       </div>
+
+      {/* Modal Popup para Cargar Ensalada Rápida desde el Dashboard */}
+      {quickAddLineCode && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
+          onClick={() => setQuickAddLineCode(null)}
+        >
+          <div
+            className={cn(
+              "w-full max-w-md rounded-3xl p-6 border shadow-2xl space-y-4 animate-scale-in",
+              goldMode
+                ? "bg-[#141006] border-amber-500/40 text-white"
+                : "bg-white border-emerald-600/30 text-[#0f291e]"
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-black flex items-center gap-2">
+                <span>⚡ Cargar Ensalada en {quickAddLineCode}</span>
+              </h3>
+              <button
+                onClick={() => setQuickAddLineCode(null)}
+                className="p-1 rounded-lg hover:bg-black/10 cursor-pointer"
+                type="button"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Variedad de ensalada */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider opacity-70">
+                Selecciona Ensalada:
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {QUICK_SALADS.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => setModalSaladName(name)}
+                    className={cn(
+                      "px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer text-left flex items-center gap-1.5",
+                      modalSaladName === name
+                        ? goldMode ? "bg-amber-500 text-black border-amber-400 font-black" : "bg-emerald-600 text-white border-emerald-700 font-black"
+                        : goldMode ? "bg-white/5 border-white/10 text-white/70" : "bg-slate-50 border-slate-200 text-slate-700"
+                    )}
+                  >
+                    <span>🥗</span>
+                    <span>{name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Tipo de Caja */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider opacity-70">
+                Tipo de Caja:
+              </label>
+              <div className="grid grid-cols-3 gap-1.5">
+                {DEFAULT_BOX_TYPES.map((box) => (
+                  <button
+                    key={box.name}
+                    type="button"
+                    onClick={() => setModalBoxType(box.name)}
+                    className={cn(
+                      "px-2 py-1.5 rounded-xl text-[11px] font-bold border transition-all cursor-pointer text-center",
+                      modalBoxType === box.name
+                        ? goldMode ? "bg-amber-500 text-black border-amber-400 font-black" : "bg-emerald-600 text-white border-emerald-700 font-black"
+                        : goldMode ? "bg-white/5 border-white/10 text-white/70" : "bg-slate-50 border-slate-200 text-slate-700"
+                    )}
+                  >
+                    {box.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Cantidad de Cajas */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider opacity-70">
+                  Cajas Totales:
+                </label>
+                <input
+                  type="number"
+                  value={modalBoxes}
+                  onChange={(e) => setModalBoxes(e.target.value)}
+                  className={cn(
+                    "w-full h-10 px-3 rounded-xl border text-sm font-bold",
+                    goldMode ? "bg-white/5 border-white/15 text-white" : "bg-slate-50 border-slate-300 text-black"
+                  )}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider opacity-70">
+                  Noblejas (cajas):
+                </label>
+                <input
+                  type="number"
+                  value={modalNoblejas}
+                  onChange={(e) => setModalNoblejas(e.target.value)}
+                  className={cn(
+                    "w-full h-10 px-3 rounded-xl border text-sm font-bold",
+                    goldMode ? "bg-white/5 border-white/15 text-white" : "bg-slate-50 border-slate-300 text-black"
+                  )}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            {/* Lote */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold uppercase tracking-wider opacity-70">
+                Lote (Opcional):
+              </label>
+              <input
+                type="text"
+                value={modalLote}
+                onChange={(e) => setModalLote(e.target.value)}
+                placeholder="Ej. L-2611A"
+                className={cn(
+                  "w-full h-10 px-3 rounded-xl border text-sm font-bold",
+                  goldMode ? "bg-white/5 border-white/15 text-white" : "bg-slate-50 border-slate-300 text-black"
+                )}
+              />
+            </div>
+
+            {/* Botón Iniciar */}
+            <button
+              onClick={handleQuickAddSubmit}
+              className={cn(
+                "w-full h-12 rounded-2xl font-black text-sm transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 shadow-lg",
+                goldMode
+                  ? "bg-gradient-to-r from-amber-500 to-yellow-400 text-black shadow-amber-500/25"
+                  : "bg-gradient-to-r from-emerald-600 to-teal-500 text-white shadow-emerald-500/25"
+              )}
+              type="button"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>INICIAR PRODUCCIÓN EN {quickAddLineCode}</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
