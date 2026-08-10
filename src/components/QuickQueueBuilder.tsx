@@ -47,11 +47,16 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
   const [note, setNote] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
-  // Cálculos en vivo
-  const numQuantity = parseInt(quantity, 10) || 0;
-  const numNobPallets = parseInt(noblejasPallets, 10) || 0;
-  const numNobCajas = parseInt(noblejasCajas, 10) || 0;
+  // Cálculos en vivo y límites de Noblejas
+  const numQuantity = Math.max(0, parseInt(quantity, 10) || 0);
+  const numNobPallets = Math.max(0, parseInt(noblejasPallets, 10) || 0);
+  const numNobCajas = Math.max(0, parseInt(noblejasCajas, 10) || 0);
   const totalNoblejasBoxes = numNobPallets * boxesPerPallet + numNobCajas;
+
+  // Límites estrictos basados en la cantidad total de la orden
+  const maxNoblejasPallets = Math.max(0, Math.floor(numQuantity / boxesPerPallet));
+  const remainingMilagroBoxes = Math.max(0, numQuantity - totalNoblejasBoxes);
+  const canAddNobPallet = (numNobPallets + 1) * boxesPerPallet <= numQuantity;
 
   const calc = calculateFormat({
     id: "preview",
@@ -68,17 +73,68 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
     const box = DEFAULT_BOX_TYPES.find((b) => b.name === boxName);
     if (box) {
       setBoxesPerPallet(box.defaultBoxesPerPallet);
+      // Re-validar noblejas con la nueva capacidad de palet
+      const newMaxPallets = Math.max(0, Math.floor(numQuantity / box.defaultBoxesPerPallet));
+      if (numNobPallets > newMaxPallets) {
+        setNoblejasPallets(String(newMaxPallets));
+      }
+    }
+  };
+
+  const handleQuantityChange = (newQtyStr: string) => {
+    setQuantity(newQtyStr);
+    const newQty = Math.max(0, parseInt(newQtyStr, 10) || 0);
+    // Si la nueva cantidad es menor que el total de noblejas actual, ajustar automáticamente
+    if (totalNoblejasBoxes > newQty) {
+      const newMaxPallets = Math.max(0, Math.floor(newQty / boxesPerPallet));
+      const newRemainingCajas = Math.max(0, newQty - newMaxPallets * boxesPerPallet);
+      setNoblejasPallets(String(newMaxPallets));
+      setNoblejasCajas(String(newRemainingCajas));
     }
   };
 
   const handleAddQuickQty = (amount: number) => {
     const current = parseInt(quantity, 10) || 0;
-    setQuantity(String(current + amount));
+    handleQuantityChange(String(current + amount));
+  };
+
+  const handleNoblejasPalletsChange = (val: string) => {
+    if (val === "") {
+      setNoblejasPallets("");
+      return;
+    }
+    let p = parseInt(val, 10) || 0;
+    p = Math.max(0, Math.min(p, maxNoblejasPallets));
+    setNoblejasPallets(String(p));
+
+    // Si excede el total junto con las cajas sueltas, ajustar cajas sueltas
+    const remainingForBoxes = Math.max(0, numQuantity - p * boxesPerPallet);
+    if (numNobCajas > remainingForBoxes) {
+      setNoblejasCajas(String(remainingForBoxes));
+    }
+  };
+
+  const handleNoblejasCajasChange = (val: string) => {
+    if (val === "") {
+      setNoblejasCajas("");
+      return;
+    }
+    let c = parseInt(val, 10) || 0;
+    const maxAvailableCajas = Math.max(0, numQuantity - numNobPallets * boxesPerPallet);
+    c = Math.max(0, Math.min(c, maxAvailableCajas));
+    setNoblejasCajas(String(c));
   };
 
   const handleAddQuickNobPallet = (pallets: number) => {
     const current = parseInt(noblejasPallets, 10) || 0;
-    setNoblejasPallets(String(current + pallets));
+    const target = current + pallets;
+    if (target <= maxNoblejasPallets) {
+      setNoblejasPallets(String(target));
+      const remainingForBoxes = Math.max(0, numQuantity - target * boxesPerPallet);
+      if (numNobCajas > remainingForBoxes) {
+        setNoblejasCajas(String(remainingForBoxes));
+      }
+    }
   };
 
   const handleResetNoblejas = () => {
@@ -101,7 +157,7 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
     }
 
     if (totalNoblejasBoxes > numQuantity) {
-      setError("Las cajas de Noblejas no pueden superar las cajas totales de la orden.");
+      setError(`Las cajas de Noblejas (${totalNoblejasBoxes}) no pueden superar el total de la orden (${numQuantity} cajas).`);
       return;
     }
 
@@ -281,9 +337,9 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
           </div>
         </div>
 
-        {/* 4. Cantidad de Cajas Totales y Noblejas */}
+        {/* 4. Cantidad de Cajas Totales y Noblejas (con Capping Estricto) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-          {/* Columna A: Cantidad Total de Cajas */}
+          {/* Columna A: Cantidad Total de Cajas de la Orden */}
           <div className={cn(
             "space-y-2 rounded-2xl p-4 border shadow-sm",
             goldMode ? "bg-white/[0.02] border-white/5" : "bg-emerald-50/40 border-emerald-600/15"
@@ -295,7 +351,7 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
               </label>
               {numQuantity > 0 && (
                 <span className="text-xs font-mono font-bold text-emerald-600">
-                  {calc.pallets}p + {calc.pico}c
+                  {Math.floor(numQuantity / boxesPerPallet)}p + {numQuantity % boxesPerPallet}c ({numQuantity} c)
                 </span>
               )}
             </div>
@@ -305,7 +361,7 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
                 type="number"
                 min="1"
                 value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
+                onChange={(e) => handleQuantityChange(e.target.value)}
                 placeholder="Ej: 144"
                 className={cn(
                   "flex-1 h-12 px-3 rounded-xl border text-base font-mono font-black transition-all",
@@ -340,9 +396,12 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
                 +50
               </button>
             </div>
+            <p className={cn("text-[10px] font-mono", goldMode ? "text-white/40" : "text-slate-500")}>
+              Total requerido en fábrica para esta orden
+            </p>
           </div>
 
-          {/* Columna B: Noblejas */}
+          {/* Columna B: Noblejas (Limitadas por las cajas de la orden) */}
           <div className={cn(
             "space-y-2 rounded-2xl p-4 border shadow-sm",
             goldMode ? "bg-purple-500/[0.03] border-purple-500/15" : "bg-purple-50/70 border-purple-200"
@@ -350,24 +409,27 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
             <div className="flex items-center justify-between">
               <label className="text-[11px] font-black text-purple-700 uppercase tracking-wider flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-purple-500" />
-                <span>Noblejas (Palets y Cajas)</span>
+                <span>Noblejas (Máx: {numQuantity} cajas)</span>
               </label>
               {totalNoblejasBoxes > 0 && (
                 <span className="text-xs font-mono font-bold text-purple-700">
-                  = {totalNoblejasBoxes} cajas ({numNobPallets}p + {numNobCajas}c)
+                  {totalNoblejasBoxes}/{numQuantity} c ({numNobPallets}p + {numNobCajas}c)
                 </span>
               )}
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <span className={cn("text-[9px] uppercase font-bold block", goldMode ? "text-purple-300/60" : "text-purple-700")}>Palets</span>
+                <span className={cn("text-[9px] uppercase font-bold block", goldMode ? "text-purple-300/60" : "text-purple-700")}>
+                  Palets (máx {maxNoblejasPallets})
+                </span>
                 <div className="flex gap-1 items-center">
                   <input
                     type="number"
                     min="0"
+                    max={maxNoblejasPallets}
                     value={noblejasPallets}
-                    onChange={(e) => setNoblejasPallets(e.target.value)}
+                    onChange={(e) => handleNoblejasPalletsChange(e.target.value)}
                     placeholder="0"
                     className={cn(
                       "w-full h-11 px-2.5 rounded-xl border text-sm font-mono font-bold transition-all",
@@ -378,14 +440,17 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
                   />
                   <button
                     type="button"
+                    disabled={!canAddNobPallet}
                     onClick={() => handleAddQuickNobPallet(1)}
                     className={cn(
-                      "h-11 px-2 rounded-xl border text-xs font-bold transition-all cursor-pointer shrink-0 shadow-sm",
-                      goldMode
-                        ? "bg-purple-500/10 hover:bg-purple-500/20 border-purple-500/30 text-purple-300"
-                        : "bg-purple-100 hover:bg-purple-200 border-purple-300 text-purple-800"
+                      "h-11 px-2 rounded-xl border text-xs font-bold transition-all shrink-0 shadow-sm",
+                      !canAddNobPallet
+                        ? "opacity-30 cursor-not-allowed border-purple-300/20 bg-purple-500/5 text-purple-400"
+                        : goldMode
+                        ? "bg-purple-500/10 hover:bg-purple-500/20 border-purple-500/30 text-purple-300 cursor-pointer"
+                        : "bg-purple-100 hover:bg-purple-200 border-purple-300 text-purple-800 cursor-pointer"
                     )}
-                    title="Añadir 1 palet de Noblejas"
+                    title={canAddNobPallet ? "Añadir 1 palet de Noblejas" : `No se puede añadir otro palet (límite: ${numQuantity} cajas)`}
                   >
                     +1p
                   </button>
@@ -393,13 +458,16 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
               </div>
 
               <div className="space-y-1">
-                <span className={cn("text-[9px] uppercase font-bold block", goldMode ? "text-purple-300/60" : "text-purple-700")}>Cajas Sueltas</span>
+                <span className={cn("text-[9px] uppercase font-bold block", goldMode ? "text-purple-300/60" : "text-purple-700")}>
+                  Cajas Sueltas
+                </span>
                 <div className="flex gap-1 items-center">
                   <input
                     type="number"
                     min="0"
+                    max={Math.max(0, numQuantity - numNobPallets * boxesPerPallet)}
                     value={noblejasCajas}
-                    onChange={(e) => setNoblejasCajas(e.target.value)}
+                    onChange={(e) => handleNoblejasCajasChange(e.target.value)}
                     placeholder="0"
                     className={cn(
                       "w-full h-11 px-2.5 rounded-xl border text-sm font-mono font-bold transition-all",
@@ -424,10 +492,13 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
                 </div>
               </div>
             </div>
+            <p className={cn("text-[10px] font-mono", goldMode ? "text-purple-300/60" : "text-purple-700")}>
+              Quedan {remainingMilagroBoxes} cajas para Milagro
+            </p>
           </div>
         </div>
 
-        {/* Resumen del cálculo en vivo */}
+        {/* Resumen del reparto en vivo */}
         {numQuantity > 0 && (
           <div className={cn(
             "p-4 rounded-2xl border flex items-center justify-between flex-wrap gap-2 text-xs shadow-sm",
@@ -435,7 +506,7 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
           )}>
             <div className="flex items-center gap-3 flex-wrap">
               <span className={cn("font-bold", goldMode ? "text-white/70" : "text-slate-800")}>
-                Milagro en {selectedLine}: <span className="font-mono text-emerald-600 font-black">{calc.pallets} palets + {calc.pico} cajas</span>
+                Milagro en {selectedLine}: <span className="font-mono text-emerald-600 font-black">{calc.pallets} palets + {calc.pico} cajas ({remainingMilagroBoxes} c)</span>
               </span>
               {totalNoblejasBoxes > 0 && (
                 <span className="font-bold text-purple-700">
@@ -516,9 +587,12 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
         {/* Botón de Añadir a la Cola */}
         <button
           type="submit"
+          disabled={totalNoblejasBoxes > numQuantity || numQuantity <= 0}
           className={cn(
             "w-full h-14 rounded-2xl font-black text-sm transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 shadow-xl",
-            goldMode
+            totalNoblejasBoxes > numQuantity || numQuantity <= 0
+              ? "opacity-50 cursor-not-allowed bg-slate-400 text-white"
+              : goldMode
               ? "bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 text-black shadow-amber-500/25"
               : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30"
           )}

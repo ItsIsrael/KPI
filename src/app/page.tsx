@@ -510,187 +510,40 @@ export default function Home() {
           </Button>
         </div>
 
-        {/* Lista de ensaladas */}
-        {salads.length > 0 && (
-          <section className="space-y-3">
-            <h2 className="text-xs font-semibold text-white/30 uppercase tracking-wider">
-              Ensaladas en {activeLineCode} ({salads.length})
-            </h2>
-
-            {salads.map((salad) => {
-              const saladTotalBoxes = salad.formats.reduce((s, f) => s + f.quantity, 0);
-              const saladTotalPallets = salad.formats.reduce(
-                (s, f) => s + calculateFormat(f).pallets, 0
-              );
-              const hasNoblejas = salad.formats.some((f) => f.noblejas > 0);
-
-              return (
-                <div
-                  key={salad.id}
-                  className="glass-card rounded-2xl p-4 md:p-5 hover:border-white/20 transition-all duration-200"
-                >
-                  <div className="flex items-center gap-4 flex-col sm:flex-row">
-                    {/* Contenido (Sin imagen, ancho completo) */}
-                    <div className="flex-1 min-w-0 w-full">
-                      <div className="flex items-center gap-2 flex-wrap mb-2">
-                        <h3 className="text-xl font-black text-white leading-tight">
-                          {salad.name}
-                        </h3>
-                        {hasNoblejas && (
-                          <span className="text-[9px] font-bold bg-purple-500/20 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded-full uppercase tracking-wide">
-                            Noblejas
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-2 mb-3 max-w-md">
-                        <div className="bg-white/[0.03] rounded-xl p-2 text-center border border-white/5">
-                          <p className="text-[9px] text-white/30 uppercase tracking-wider leading-none">Cajas</p>
-                          <p className="text-base font-black text-white mt-1 leading-none">{saladTotalBoxes.toLocaleString()}</p>
-                        </div>
-                        <div className="bg-white/[0.03] rounded-xl p-2 text-center border border-emerald-500/10">
-                          <p className="text-[9px] text-emerald-400/40 uppercase tracking-wider leading-none">Palets</p>
-                          <p className="text-base font-black text-emerald-400 mt-1 leading-none">{saladTotalPallets}</p>
-                        </div>
-                        <div className="bg-white/[0.03] rounded-xl p-2 text-center border border-white/5">
-                          <p className="text-[9px] text-white/30 uppercase tracking-wider leading-none">Formatos</p>
-                          <p className="text-base font-black text-white mt-1 leading-none">{salad.formats.length}</p>
-                        </div>
-                      </div>
-
-                      {/* Chips de formatos con wrap limpio */}
-                      <div className="flex flex-wrap gap-1.5 max-w-full">
-                        {salad.formats.map((f) => {
-                          const fc = calculateFormat(f);
-                          return (
-                            <div
-                              key={f.id}
-                              className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-xs shrink-0"
-                            >
-                              <span className="text-white/70 font-semibold">📦 {f.boxType}</span>
-                              <span className="text-white/30 ml-1.5">
-                                {fc.pallets}p + {fc.pico}c
-                                {f.noblejas > 0 && (
-                                  <span className="text-purple-400/60 ml-1">
-                                    · Nob {f.noblejas}
-                                  </span>
-                                )}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Acciones */}
-                    <div className="flex sm:flex-col gap-2 shrink-0 w-full sm:w-auto justify-end border-t border-white/5 sm:border-t-0 pt-3 sm:pt-0 mt-2 sm:mt-0">
-                      <Button
-                        onClick={() => handleEditSalad(salad)}
-                        variant="outline"
-                        size="sm"
-                        className="h-10 px-4 sm:px-0 sm:w-10 border-white/10 bg-white/5 text-white/60 hover:text-white hover:bg-white/10 rounded-xl"
-                        id={`edit-salad-${salad.id}`}
-                      >
-                        Editar
-                      </Button>
-                      <Button
-                        onClick={() => removeSalad(salad.id)}
-                        variant="outline"
-                        size="sm"
-                        className="h-10 px-4 sm:px-0 sm:w-10 border-red-500/20 bg-red-500/5 text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded-xl"
-                        id={`remove-salad-${salad.id}`}
-                      >
-                        ✕
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </section>
-        )}
-
-        {/* Cola de producción */}
-        {salads.length > 0 && (
-          <section className="space-y-3">
-            {/* Rebuild queue button removed */}
-
-            <ProductionQueue editable />
-
-            {queue.length > 0 && (
-              <div className="flex gap-2.5 mt-2">
-                <Button
-                  onClick={clearQueueAndSalads}
-                  variant="outline"
-                  className="h-20 px-6 border-red-500/20 bg-red-500/5 text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-2xl font-black text-xs uppercase tracking-wider transition-all shrink-0 flex flex-col items-center justify-center gap-1 cursor-pointer"
-                  title="Vaciar planificación actual"
-                >
-                  <Trash2 className="w-5 h-5 text-red-500/80" />
-                  <span>Limpiar</span>
-                </Button>
-                <Button
-                  onClick={handleBuildAndStart}
-                  className="flex-1 h-20 text-2xl font-black bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 hover:from-emerald-400 hover:via-green-400 hover:to-teal-400 text-white rounded-2xl shadow-xl shadow-emerald-500/30 transition-all active:scale-[0.98]"
-                  id="start-production-btn"
-                >
-                  ▶ INICIAR PRODUCCIÓN
-                </Button>
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* Empty state & History */}
-        {salads.length === 0 && (
-          <div className="space-y-6 py-12 max-w-md mx-auto w-full">
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/20 flex items-center justify-center text-3xl mx-auto mb-3 shadow-xl shadow-emerald-500/10">
-                🥗
-              </div>
-              <h2 className="text-xl font-bold text-white/30 mb-1">Sin ensaladas</h2>
-              <p className="text-white/20 text-xs">Crea tu primera ensalada para comenzar</p>
+        {/* History */}
+        {history && history.length > 0 && (
+          <section className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 flex flex-col max-w-xl mx-auto w-full">
+            <div className="flex items-center justify-between mb-3 shrink-0">
+              <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider flex items-center gap-1.5">
+                <History className="w-3.5 h-3.5" /> Historial Reciente ({history.length})
+              </h3>
+              <button
+                onClick={clearHistory}
+                className="text-[10px] font-bold text-red-400/60 hover:text-red-400 hover:bg-red-500/10 px-2 py-0.5 rounded transition-all cursor-pointer"
+              >
+                Limpiar
+              </button>
             </div>
-
-            {history && history.length > 0 && (
-              <section className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 flex flex-col">
-                <div className="flex items-center justify-between mb-3 shrink-0">
-                  <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider flex items-center gap-1.5">
-                    <History className="w-3.5 h-3.5" /> Historial Reciente ({history.length})
-                  </h3>
+            <div className="space-y-1.5 max-h-[240px] overflow-y-auto pr-0.5">
+              {history.map((h) => (
+                <div key={h.id} className="flex items-center justify-between p-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-xs hover:bg-white/[0.04] transition-all">
+                  <div className="min-w-0 flex-1 mr-2">
+                    <p className="font-bold text-white/80 truncate">{h.saladName}</p>
+                    <p className="text-[10px] text-white/40 truncate">
+                      {h.boxType} · {h.quantity}c {h.noblejas > 0 ? `· ${h.noblejas} Nob` : ""}
+                    </p>
+                  </div>
                   <button
-                    onClick={clearHistory}
-                    className="text-[10px] font-bold text-red-400/60 hover:text-red-400 hover:bg-red-500/10 px-2 py-0.5 rounded transition-all cursor-pointer"
+                    onClick={() => reproduceFromHistory(h)}
+                    className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 transition-all cursor-pointer active:scale-95 shrink-0"
+                    title="Volver a producir inmediatamente"
                   >
-                    Limpiar
+                    <Play className="w-3.5 h-3.5 fill-current" />
                   </button>
                 </div>
-                <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-0.5">
-                  {history.map((h) => (
-                    <div key={h.id} className="flex items-center justify-between p-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-xs hover:bg-white/[0.04] transition-all">
-                      <div className="min-w-0 flex-1 mr-2">
-                        <p className="font-bold text-white/80 truncate">{h.saladName}</p>
-                        <p className="text-[10px] text-white/40 truncate">
-                          {h.boxType} · {h.quantity}c {h.noblejas > 0 ? `· ${h.noblejas} Nob` : ""}
-                        </p>
-                        {h.duration && (
-                          <p className="text-[9px] text-white/30 mt-0.5 flex items-center gap-1 font-mono">
-                            ⏱️ {h.duration}
-                          </p>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => reproduceFromHistory(h)}
-                        className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 transition-all cursor-pointer active:scale-95 shrink-0"
-                        title="Volver a producir inmediatamente"
-                      >
-                        <Play className="w-3.5 h-3.5 fill-current" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-          </div>
+              ))}
+            </div>
+          </section>
         )}
 
         <div className="h-4" />
@@ -852,32 +705,105 @@ export default function Home() {
       <div className="flex flex-col min-h-screen w-full relative z-10">
         {activeLineCode === "ALL" ? (
           <div className="flex-1 flex flex-col min-h-screen overflow-y-auto">
-            <header className="sticky top-0 z-40 bg-black/40 backdrop-blur-xl border-b border-white/10 p-3">
-              <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-xs font-black text-purple-300">
-                    KPI
-                  </div>
-                  <div>
-                    <h1 className="text-base sm:text-lg font-black text-white leading-tight">
-                      L.I.A KPI · Dashboard de Producción
-                    </h1>
-                    <p className="text-[10px] text-white/50">Visión simultánea de todas las líneas en planta</p>
-                  </div>
-                </div>
-                <div className="flex items-center bg-black/40 border border-white/10 rounded-xl p-1 gap-1">
-                  {(["K00", "K01", "K02", "K03"] as const).map((code) => (
+            <header className="sticky top-0 z-40 bg-black/20 backdrop-blur-xl border-b border-white/10">
+              <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* Logo Custom Generado clickable for Gold Mode */}
+                  <div className="flex items-center gap-2.5">
                     <button
-                      key={code}
-                      onClick={() => setActiveLineCode(code)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-black text-white/60 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                      onClick={toggleGoldMode}
+                      className="w-9 h-9 rounded-xl overflow-hidden border border-emerald-500/30 bg-black/40 cursor-pointer hover:scale-110 active:scale-95 transition-all relative group shadow-sm"
+                      title="Cambiar tema de la aplicación (Florette / Premium Gold)"
+                      type="button"
                     >
-                      {code}
+                      {goldMode && (
+                        <span className="absolute inset-0 bg-amber-500/30 animate-pulse pointer-events-none" />
+                      )}
+                      <img src="/images/logo.png" className="w-full h-full object-cover" alt="KPI logo" />
                     </button>
-                  ))}
-                  <button className="px-2.5 py-1 rounded-lg text-xs font-black bg-purple-600 text-white shadow-sm cursor-default">
-                    Dashboard
+                    <div>
+                      <h1 className="text-xl font-black tracking-tight leading-none flex items-center gap-1.5 text-foreground">
+                        <span className={cn(goldMode && "text-gold-gradient")}>L.I.A</span>
+                        {goldMode ? (
+                          <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(245,158,11,0.4)] tracking-wide uppercase shrink-0">
+                            GOLD
+                          </span>
+                        ) : (
+                          <span className="bg-emerald-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow-sm tracking-wide uppercase shrink-0">
+                            FLORETTE
+                          </span>
+                        )}
+                      </h1>
+                      <p className={cn("text-[9px] font-bold uppercase tracking-[0.12em] leading-none mt-1", goldMode ? "text-amber-400/80" : "text-emerald-700 dark:text-emerald-400")}>
+                        DASHBOARD GENERAL
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Etiqueta de Hoy compacta */}
+                  <button
+                    onClick={() => setShowLabelsModal(true)}
+                    className={cn(
+                      "ml-1.5 md:ml-3 px-2.5 py-1 rounded-xl text-[10px] md:text-xs font-black border uppercase flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 shadow-md cursor-pointer",
+                      todayLabel.bgClass,
+                      todayLabel.textClass,
+                      todayLabel.borderClass
+                    )}
+                    title="Ver colores de etiquetas semanales"
+                  >
+                    <div className={cn("w-2 h-2 rounded-full border border-black/95 shadow-[0_0_2px_rgba(0,0,0,0.6)]", todayLabel.dotClass, "animate-pulse")} />
+                    <span className="opacity-75 font-bold">Hoy:</span>
+                    <span>{todayLabel.colorName}</span>
                   </button>
+                </div>
+
+                <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                  {/* Selector de Tema (Florette / Gold) */}
+                  <button
+                    onClick={toggleGoldMode}
+                    className={cn(
+                      "h-10 px-3 border rounded-xl cursor-pointer transition-all active:scale-95 flex items-center gap-1.5 text-xs font-black shrink-0 shadow-sm",
+                      goldMode
+                        ? "border-amber-500/40 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30"
+                        : "border-emerald-600/30 bg-emerald-600 text-white hover:bg-emerald-700"
+                    )}
+                    title="Haz clic para cambiar entre el tema Florette y Premium Gold"
+                    type="button"
+                  >
+                    {goldMode ? "Gold" : "Florette"}
+                  </button>
+
+                  {/* Pantalla completa */}
+                  <button
+                    onClick={toggleFullscreen}
+                    className="h-10 w-10 border border-white/10 bg-white/5 hover:bg-white/10 backdrop-blur-sm text-white rounded-xl cursor-pointer transition-all active:scale-95 flex items-center justify-center"
+                    title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+                    type="button"
+                  >
+                    {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+                  </button>
+
+                  {/* Calculadora */}
+                  <button
+                    onClick={toggleCalculator}
+                    className="h-10 w-10 border border-white/10 bg-white/5 hover:bg-white/10 backdrop-blur-sm text-white rounded-xl cursor-pointer transition-all active:scale-95 flex items-center justify-center"
+                    id="calc-toggle-btn-dash"
+                    title="Calculadora"
+                    type="button"
+                  >
+                    <CalcIcon className="w-4 h-4" />
+                  </button>
+
+                  {/* Cerrar Sesión */}
+                  <button
+                    onClick={logout}
+                    className="h-10 w-10 border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 backdrop-blur-sm text-red-400 rounded-xl cursor-pointer transition-all active:scale-95 flex items-center justify-center animate-fade-in"
+                    title="Cerrar sesión"
+                    type="button"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                  <Clock />
                 </div>
               </div>
             </header>
