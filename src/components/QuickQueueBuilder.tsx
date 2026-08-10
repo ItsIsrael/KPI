@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useProductionStore } from "@/store/production-store";
 import { DEFAULT_BOX_TYPES, DEFAULT_PRODUCTION_LINES, generateId, calculateFormat, getSaladsPerBox } from "@/types/types";
 import type { Salad } from "@/types/types";
@@ -31,6 +31,13 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
 
   // Línea seleccionada en el formulario (por defecto la activa)
   const [selectedLine, setSelectedLine] = useState<string>(activeLineCode === "ALL" ? "K00" : activeLineCode);
+
+  useEffect(() => {
+    if (activeLineCode !== "ALL") {
+      setSelectedLine(activeLineCode);
+    }
+  }, [activeLineCode]);
+
   const [saladName, setSaladName] = useState("");
   const [selectedBoxType, setSelectedBoxType] = useState(DEFAULT_BOX_TYPES[0].name);
   const [boxesPerPallet, setBoxesPerPallet] = useState(DEFAULT_BOX_TYPES[0].defaultBoxesPerPallet);
@@ -95,7 +102,7 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
     setNoblejasCajas("0");
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -135,7 +142,10 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
       ],
     };
 
-    addSalad(newSalad, selectedLine);
+    await addSalad(newSalad, selectedLine);
+    if (activeLineCode !== "ALL" && activeLineCode !== selectedLine) {
+      await setActiveLineCode(selectedLine);
+    }
 
     // Resetear formulario para entrada rápida continua
     setQuantity("");

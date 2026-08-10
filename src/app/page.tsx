@@ -121,7 +121,7 @@ export default function Home() {
   // Efecto para sincronizar datos de la línea activa y suscripción Realtime
   useEffect(() => {
     loadActiveLineData();
-  }, [activeLineCode, loadActiveLineData]);
+  }, [activeLineCode]);
 
   useEffect(() => {
     if (!activeLineId || activeLineCode === "ALL") return;
@@ -129,7 +129,7 @@ export default function Home() {
       loadActiveLineData();
     });
     return () => unsubscribe();
-  }, [activeLineId, activeLineCode, loadActiveLineData]);
+  }, [activeLineId, activeLineCode]);
 
   // Escuchar cambios de fullscreen
   useEffect(() => {

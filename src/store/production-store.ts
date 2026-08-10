@@ -287,7 +287,7 @@ export const useProductionStore = create<ProductionState>()(
       },
 
       loadActiveLineData: async () => {
-        const { activeLineCode } = get();
+        const { activeLineCode, queue: currentLocalQueue, salads: currentLocalSalads } = get();
         if (activeLineCode === "ALL") return;
 
         try {
@@ -340,8 +340,11 @@ export const useProductionStore = create<ProductionState>()(
                 ...lineState,
                 lineStorage: { ...s.lineStorage, [activeLineCode]: lineState },
               }));
+            } else if (currentLocalQueue && currentLocalQueue.length > 0) {
+              // Si la base de datos respondió vacía pero hay cola local, sincronizar hacia Supabase para evitar pérdidas
+              await syncQueueItems(currentLine.id, currentLocalQueue);
             } else {
-              // La línea no tiene órdenes en base de datos
+              // La línea realmente está vacía y no tiene cola local
               const emptyState = {
                 queue: [],
                 salads: [],
