@@ -20,6 +20,28 @@ import {
   saveHistoryLog 
 } from "@/lib/supabase-service";
 
+// Canal de sincronización local instantánea entre pestañas/monitores (<10ms)
+const localSyncChannel = typeof window !== "undefined" && "BroadcastChannel" in window
+  ? new BroadcastChannel("kpi_salad_local_sync")
+  : null;
+
+if (localSyncChannel) {
+  localSyncChannel.onmessage = (event) => {
+    if (event.data?.type === "LINE_DATA_UPDATED") {
+      const state = useProductionStore.getState();
+      if (state.activeLineCode === event.data.lineCode || state.activeLineCode === "ALL") {
+        state.loadActiveLineData();
+      }
+    }
+  };
+}
+
+function broadcastLocalChange(lineCode: string) {
+  try {
+    localSyncChannel?.postMessage({ type: "LINE_DATA_UPDATED", lineCode });
+  } catch {}
+}
+
 // Helper para sintetizar sonidos limpios táctiles e industriales
 function playSynthSound(type: "click" | "success") {
   if (typeof window === "undefined") return;

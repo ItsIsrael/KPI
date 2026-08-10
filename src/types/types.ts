@@ -190,6 +190,11 @@ export interface LineOverview {
   percent: number;
   queueLength: number;
   pendingCount: number;
+  currentItem?: QueueItem;
+  nextItem?: QueueItem;
+  calc?: { pallets: number; pico: number; production: number };
+  progress?: FormatProgress;
+  queue?: QueueItem[];
 }
 
 export interface TemplateItem {

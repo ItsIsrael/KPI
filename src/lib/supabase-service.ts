@@ -322,6 +322,9 @@ export async function getFactoryOverview(): Promise<LineOverview[]> {
     let noblejasDoneBoxes = 0;
     let percent = 0;
 
+    let currentCalc: { pallets: number; pico: number; production: number } | undefined = undefined;
+    let currentProg: FormatProgress | undefined = undefined;
+
     if (currentItem) {
       const calc = calculateFormat({
         id: currentItem.formatId,
@@ -330,6 +333,7 @@ export async function getFactoryOverview(): Promise<LineOverview[]> {
         noblejas: currentItem.noblejas,
         boxesPerPallet: currentItem.boxesPerPallet,
       });
+      currentCalc = calc;
 
       const prog = queueProgress[currentItem.id] || {
         completedPallets: 0,
@@ -338,6 +342,7 @@ export async function getFactoryOverview(): Promise<LineOverview[]> {
         nobjelasPicoCompleted: false,
         boxesAdjustment: 0,
       };
+      currentProg = prog;
 
       totalBoxes = currentItem.quantity;
       noblejasBoxes = currentItem.noblejas;
@@ -366,6 +371,11 @@ export async function getFactoryOverview(): Promise<LineOverview[]> {
       percent,
       queueLength: queue.length,
       pendingCount: Math.max(0, queue.length - currentQueueIndex - 1),
+      currentItem,
+      nextItem: queue[currentQueueIndex + 1],
+      calc: currentCalc,
+      progress: currentProg,
+      queue,
     });
   }
 
