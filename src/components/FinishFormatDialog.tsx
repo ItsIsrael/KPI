@@ -67,8 +67,8 @@ export function FinishFormatDialog() {
       >
         {/* Título */}
         <div className="text-center mb-6">
-          <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-3 animate-pulse">
-            <span className="text-3xl">🎉</span>
+          <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mx-auto mb-3 text-emerald-400 font-black text-xl">
+            OK
           </div>
           <h3 className={cn("text-2xl font-black", goldMode ? "text-white" : "text-slate-900")}>¡Lote Completado!</h3>
           <p className={cn("mt-1 text-sm", goldMode ? "text-white/40" : "text-slate-500")}>
@@ -104,13 +104,13 @@ export function FinishFormatDialog() {
               {transition === "salad-change" && (
                 <div className={cn("text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md flex items-center gap-1 border", goldMode ? "bg-red-500/15 border-red-500/30 text-red-400" : "bg-red-100 border-red-200 text-red-600")}>
                   <span className={cn("w-1.5 h-1.5 rounded-full animate-pulse", goldMode ? "bg-red-400" : "bg-red-500")} />
-                  ⚠️ Cambio Ensalada
+                  Cambio Ensalada
                 </div>
               )}
               {transition === "box-change" && (
                 <div className={cn("text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md flex items-center gap-1 border", goldMode ? "bg-orange-500/15 border-orange-500/30 text-orange-400" : "bg-orange-100 border-orange-200 text-orange-600")}>
                   <span className={cn("w-1.5 h-1.5 rounded-full animate-pulse", goldMode ? "bg-orange-400" : "bg-orange-500")} />
-                  ⚠️ Cambio Caja
+                  Cambio Caja
                 </div>
               )}
             </div>
@@ -119,7 +119,7 @@ export function FinishFormatDialog() {
               {transition === "salad-change" ? (
                 <span className="flex items-center gap-1.5 flex-wrap">
                   <span className={cn("line-through text-xs", goldMode ? "text-white/30" : "text-slate-400")}>{current.saladName}</span>
-                  <span className={goldMode ? "text-white" : "text-slate-900"}>➔</span>
+                  <span className={goldMode ? "text-white" : "text-slate-900"}>→</span>
                   <span className={goldMode ? "text-emerald-400" : "text-emerald-600"}>{next.saladName}</span>
                 </span>
               ) : (
@@ -129,26 +129,26 @@ export function FinishFormatDialog() {
 
             <div className={cn("flex flex-wrap gap-x-4 gap-y-1 text-xs", goldMode ? "text-white/60" : "text-slate-600")}>
               <div>
-                📦 Caja:{" "}
+                Caja:{" "}
                 {transition === "box-change" ? (
                   <span className={cn("font-bold", goldMode ? "text-white" : "text-slate-900")}>
-                    <span className={cn("line-through text-xs", goldMode ? "text-white/30" : "text-slate-400")}>{current.boxType}</span> ➔{" "}
+                    <span className={cn("line-through text-xs", goldMode ? "text-white/30" : "text-slate-400")}>{current.boxType}</span> →{" "}
                     <span className={goldMode ? "text-emerald-400" : "text-emerald-600"}>{next.boxType}</span>
                   </span>
                 ) : (
                   <span className={cn("font-bold", goldMode ? "text-white" : "text-slate-900")}>{next.boxType}</span>
                 )}
               </div>
-              <div>🔢 Cantidad: <span className={cn("font-bold", goldMode ? "text-white" : "text-slate-900")}>{next.quantity}</span> cajas</div>
+              <div>Cantidad: <span className={cn("font-bold", goldMode ? "text-white" : "text-slate-900")}>{next.quantity}</span> cajas</div>
               {next.noblejas > 0 && (
-                <div>🏢 Noblejas: <span className={cn("font-bold", goldMode ? "text-purple-400" : "text-purple-600")}>{next.noblejas}</span> c</div>
+                <div>Noblejas: <span className={cn("font-bold", goldMode ? "text-purple-400" : "text-purple-600")}>{next.noblejas}</span> c</div>
               )}
             </div>
           </div>
         ) : (
           <div className={cn("mb-6 p-4 rounded-2xl border text-center space-y-3", goldMode ? "border-emerald-500/20 bg-emerald-950/20" : "border-emerald-200 bg-emerald-50/50")}>
             <div>
-              <p className={cn("text-[10px] font-black uppercase tracking-wider", goldMode ? "text-emerald-400" : "text-emerald-700")}>🏁 ¡Fin de la planificación!</p>
+              <p className={cn("text-[10px] font-black uppercase tracking-wider", goldMode ? "text-emerald-400" : "text-emerald-700")}>Fin de la planificación</p>
               <p className={cn("text-xs mt-1", goldMode ? "text-white/50" : "text-slate-500")}>¿Quieres añadir otra ensalada o formato para continuar produciendo?</p>
             </div>
             
@@ -163,8 +163,7 @@ export function FinishFormatDialog() {
                 }}
                 className={cn("py-2.5 px-3 text-xs font-bold border rounded-xl transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1", goldMode ? "bg-purple-500/10 border-purple-500/25 hover:bg-purple-500/20 text-purple-300" : "bg-purple-50 border-purple-200 hover:bg-purple-100 text-purple-700")}
               >
-                <span>➕</span>
-                <span>Formato</span>
+                <span>+ Formato</span>
               </button>
               <button
                 type="button"
@@ -176,8 +175,7 @@ export function FinishFormatDialog() {
                 }}
                 className={cn("py-2.5 px-3 text-xs font-bold border rounded-xl transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1", goldMode ? "bg-emerald-500/10 border-emerald-500/25 hover:bg-emerald-500/20 text-emerald-300" : "bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-700")}
               >
-                <span>🥗</span>
-                <span>Nueva Ensalada</span>
+                <span>+ Nueva Ensalada</span>
               </button>
             </div>
           </div>
@@ -203,7 +201,7 @@ export function FinishFormatDialog() {
               variant="outline"
               className={cn("w-full h-12 text-sm font-bold border rounded-xl transition-colors cursor-pointer", goldMode ? "border-purple-500/20 bg-purple-500/5 text-purple-300 hover:bg-purple-500/10 hover:text-purple-200" : "border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:text-purple-800")}
             >
-              ◀ VOLVER AL ANTERIOR (CORREGIR)
+              VOLVER AL ANTERIOR (CORREGIR)
             </Button>
           )}
 

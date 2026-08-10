@@ -157,7 +157,7 @@ export function EditQueueItemDialog() {
       >
         <div className={cn("flex items-center justify-between border-b pb-3", goldMode ? "border-white/5" : "border-slate-200")}>
           <h2 className={cn("text-xl font-black", goldMode ? "text-white" : "text-slate-900")}>
-            ✏️ Editar Formato de Cola
+            Editar Formato de Cola
           </h2>
           <button
             type="button"
@@ -179,7 +179,7 @@ export function EditQueueItemDialog() {
 
         {/* Ensalada */}
         <div className="space-y-1.5">
-          <label className={cn("text-xs uppercase tracking-wider font-semibold", goldMode ? "text-white/40" : "text-slate-600")}>🥗 Ensalada</label>
+          <label className={cn("text-xs uppercase tracking-wider font-semibold", goldMode ? "text-white/40" : "text-slate-600")}>Ensalada</label>
           <input
             value={saladName}
             onChange={(e) => setSaladName(e.target.value)}
@@ -196,7 +196,7 @@ export function EditQueueItemDialog() {
 
         {/* Tipo de caja */}
         <div className="space-y-1.5">
-          <label className={cn("text-xs uppercase tracking-wider font-semibold", goldMode ? "text-white/40" : "text-slate-600")}>📦 Tipo de caja</label>
+          <label className={cn("text-xs uppercase tracking-wider font-semibold", goldMode ? "text-white/40" : "text-slate-600")}>Tipo de caja</label>
           <select
             value={boxType}
             onChange={(e) => handleBoxTypeChange(e.target.value)}
@@ -259,7 +259,7 @@ export function EditQueueItemDialog() {
                 onChange={(e) => setCambioLote(e.target.checked)}
                 className="rounded border-slate-300 bg-white text-emerald-600 focus:ring-0 focus:ring-offset-0 w-4 h-4 cursor-pointer"
               />
-              <span>🔄 Cambio de Lote</span>
+              <span>Cambio de Lote</span>
             </label>
           </div>
 

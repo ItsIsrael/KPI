@@ -127,12 +127,12 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
                   </span>
                 )}
                 {goldMode ? (
-                  <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-[0_0_10px_rgba(245,158,11,0.5)] tracking-wider uppercase shrink-0 animate-bounce">
-                    👑 GOLD
+                  <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-[0_0_10px_rgba(245,158,11,0.5)] tracking-wider uppercase shrink-0">
+                    GOLD
                   </span>
                 ) : (
                   <span className="bg-emerald-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-sm tracking-wider uppercase shrink-0">
-                    🌱 FLORETTE
+                    FLORETTE
                   </span>
                 )}
               </h1>
@@ -194,7 +194,7 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
                   title="Ver todas las líneas (Vista Fábrica)"
                   type="button"
                 >
-                  🏢
+                  Fábrica
                 </button>
               </div>
 
@@ -210,11 +210,7 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
                 title="Haz clic para alternar entre el modo Florette y Premium Gold"
                 type="button"
               >
-                {goldMode ? (
-                  <><span>👑</span> <span>Gold</span></>
-                ) : (
-                  <><span>🌱</span> <span>Florette</span></>
-                )}
+                {goldMode ? "Gold" : "Florette"}
               </button>
 
               {/* Calculadora (Icono Profesional) */}
@@ -284,7 +280,7 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
                   className="h-8 px-2 border border-white/10 bg-white/5 hover:bg-white/10 hover:text-emerald-400 text-white rounded-lg cursor-pointer transition-all active:scale-95 flex items-center justify-center gap-1 text-[10px] font-bold shrink-0"
                   title="Volver al formato anterior"
                 >
-                  ◀ Ant.
+                  Ant.
                 </button>
               )}
               {currentQueueIndex < queue.length - 1 && (
@@ -294,7 +290,7 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
                   className="h-8 px-2 border border-white/10 bg-white/5 hover:bg-white/10 hover:text-emerald-400 text-white rounded-lg cursor-pointer transition-all active:scale-95 flex items-center justify-center gap-1 text-[10px] font-bold shrink-0"
                   title="Avanzar al siguiente formato"
                 >
-                  Sig. ▶
+                  Sig.
                 </button>
               )}
               <span className="text-[10px] text-white/35 font-mono bg-white/5 px-2 py-0.5 rounded-md shrink-0">
@@ -315,7 +311,7 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
           const nextNobPico = next.noblejas % next.boxesPerPallet;
           return (
             <div className="mt-2 flex items-center gap-2 text-xs flex-wrap font-medium">
-              <span className="text-white/35 uppercase tracking-wider">SIGUIENTE →</span>
+              <span className="text-white/35 uppercase tracking-wider">SIGUIENTE:</span>
               <span
                 className={cn(
                   "font-bold flex items-center gap-1.5 flex-wrap",
@@ -327,21 +323,21 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
                 )}
               >
                 {transition === "salad-change" && (
-                  <span>🥗 {next.saladName} |</span>
+                  <span>{next.saladName} |</span>
                 )}
-                <span>📦 {next.boxType}</span>
+                <span>{next.boxType}</span>
                 <span className="text-white/70">· {next.quantity} cajas</span>
                 <span className="text-white/40 font-normal font-mono">
                   ({calcNext.pallets}p + {calcNext.pico}c)
                 </span>
                 {next.noblejas > 0 && (
                   <span className="flex items-center gap-1 text-purple-400 font-bold bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-lg ml-1">
-                    🟣 Nob: {next.noblejas} cajas ({nextNobPallets}p + {nextNobPico}c)
+                    Nob: {next.noblejas} cajas ({nextNobPallets}p + {nextNobPico}c)
                   </span>
                 )}
                 {goldMode && getActiveLote(queue, currentQueueIndex + 1) && (
                   <span className="flex items-center gap-1 text-purple-400 font-bold bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-lg ml-1">
-                    🟣 Lote: {getActiveLote(queue, currentQueueIndex + 1)}
+                    Lote: {getActiveLote(queue, currentQueueIndex + 1)}
                   </span>
                 )}
               </span>

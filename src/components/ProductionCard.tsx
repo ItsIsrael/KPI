@@ -181,10 +181,9 @@ export function ProductionCard() {
           <button
             type="button"
             onClick={() => setEditingQueueItemId(current.id)}
-            className="text-[10px] font-bold text-emerald-400/70 hover:text-emerald-400 bg-white/5 hover:bg-white/10 px-1.5 py-0.5 rounded transition-all cursor-pointer flex items-center gap-0.5"
+            className="text-[10px] font-bold text-emerald-400/70 hover:text-emerald-400 bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded transition-all cursor-pointer flex items-center gap-1"
             title="Editar OF actual"
           >
-            <span>✏️</span>
             <span>Editar</span>
           </button>
         </p>
@@ -193,21 +192,21 @@ export function ProductionCard() {
         </h2>
         {goldMode && current.note && (
           <div className="mt-2 mx-auto max-w-sm px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold flex items-center justify-center gap-1.5 animate-pulse">
-            <span>📝 Alerta:</span>
+            <span>Alerta:</span>
             <span>{current.note}</span>
           </div>
         )}
 
         {current.cambioLote && (
           <div className="mt-2 mx-auto max-w-sm px-3 py-1.5 rounded-xl bg-purple-500/20 border border-purple-500/40 text-purple-300 text-xs font-black flex items-center justify-center gap-1.5 animate-pulse shadow-[0_0_10px_rgba(168,85,247,0.3)]">
-            <span>🔄 ¡CAMBIO DE LOTE!</span>
-            <span>Lote: {getActiveLote(queue, currentQueueIndex)}</span>
+            <span>CAMBIO DE LOTE:</span>
+            <span>{getActiveLote(queue, currentQueueIndex)}</span>
           </div>
         )}
 
         {current.saladName.toUpperCase().includes("PROMO") && (
           <div className="mt-2 mx-auto max-w-sm px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/45 text-amber-300 text-xs font-black flex items-center justify-center gap-1.5 animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.3)] border-dashed border-amber-400">
-            <span>✨ ¡LLEVA FILM PROMO!</span>
+            <span>FILM PROMOCIONAL REQUERIDO</span>
           </div>
         )}
         
@@ -633,7 +632,7 @@ export function ProductionCard() {
                         title={isActive ? "Haz clic para completar este palet" : isDone && i === noblejaspalletsDone - 1 ? "Haz clic para deshacer este palet" : ""}
                       >
                         <span className="text-[9px] uppercase tracking-wider font-semibold opacity-65">Nob {i + 1}</span>
-                        <span className="text-xs">{isDone ? "📦 ✓" : "📦"}</span>
+                        <span className="text-[10px] font-bold font-mono">{isDone ? "COMPLETO" : "PENDIENTE"}</span>
                         <span className="text-[8px] opacity-40 font-mono">{(current.boxesPerPallet * saladsPerBox)} u</span>
                       </button>
                     );
@@ -811,7 +810,7 @@ export function ProductionCard() {
                         title={isActive ? "Haz clic para completar este palet" : isDone && i === currentProgress.completedPallets - 1 ? "Haz clic para deshacer este palet" : ""}
                       >
                         <span className="text-[9px] uppercase tracking-wider font-semibold opacity-65">Palet {i + 1}</span>
-                        <span className="text-xs">{isDone ? "📦 ✓" : "📦"}</span>
+                        <span className="text-[10px] font-bold font-mono">{isDone ? "COMPLETO" : "PENDIENTE"}</span>
                         <span className="text-[8px] opacity-40 font-mono">{(current.boxesPerPallet * saladsPerBox)} u</span>
                       </button>
                     );
@@ -1022,7 +1021,7 @@ function PerformanceChart({ speeds, goldMode }: { speeds: number[]; goldMode: bo
     <div className="bg-black/30 border border-white/5 rounded-2xl p-3 space-y-2 text-left">
       <div className="flex items-center justify-between">
         <span className="text-[9px] text-white/35 uppercase tracking-wider font-bold">
-          📊 Ritmo de Paletizado (Live)
+          Ritmo de Paletizado (Live)
         </span>
         <span className={cn("text-[10px] font-bold tabular-nums", goldMode ? "text-amber-400" : "text-emerald-400")}>
           Último: {speeds[speeds.length - 1]} c/min

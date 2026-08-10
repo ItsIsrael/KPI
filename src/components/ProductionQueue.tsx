@@ -75,7 +75,7 @@ export function ProductionQueue({ editable = false }: ProductionQueueProps) {
       >
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-white/40 uppercase tracking-wider">
-            📋 Cola de producción ({queue.length})
+            Cola de producción ({queue.length})
           </h3>
           {isProducing && doneCount > 0 && (
             <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">
@@ -152,7 +152,7 @@ export function ProductionQueue({ editable = false }: ProductionQueueProps) {
                         : "bg-purple-500/10 text-purple-400 border border-purple-500/20"
                     }`}
                   >
-                    <span>{isSaladChange ? "🔴" : isBoxChange ? "🟠" : "🟣"}</span>
+                    <span className={cn("w-2 h-2 rounded-full", isSaladChange ? "bg-red-400" : isBoxChange ? "bg-orange-400" : "bg-purple-400")} />
                     <span>
                       {isSaladChange
                         ? `Cambio: ${prevItem.saladName} → ${item.saladName}`
@@ -180,14 +180,16 @@ export function ProductionQueue({ editable = false }: ProductionQueueProps) {
                       : "bg-white/[0.02] border-white/10 hover:bg-white/[0.04] cursor-pointer"
                   )}
                 >
-                  {/* Flechas de ordenación */}
+                  {/* Flechas de reordenación */}
                   {editable && (!isProducing || isPending) && (
-                    <div className="flex flex-col gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex flex-col gap-0.5" onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
                         onClick={() => moveUp(index)}
                         disabled={index <= (isProducing ? currentQueueIndex + 1 : 0)}
-                        className="w-9 h-9 flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/40 hover:text-white hover:bg-white/10 transition-all cursor-pointer active:scale-95 disabled:pointer-events-none disabled:opacity-20"
+                        className={cn(
+                          "p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-colors cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
+                        )}
                         title="Subir"
                       >
                         <ChevronUp className="w-5 h-5" />
@@ -196,7 +198,9 @@ export function ProductionQueue({ editable = false }: ProductionQueueProps) {
                         type="button"
                         onClick={() => moveDown(index)}
                         disabled={index >= queue.length - 1}
-                        className="w-9 h-9 flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/40 hover:text-white hover:bg-white/10 transition-all cursor-pointer active:scale-95 disabled:pointer-events-none disabled:opacity-20"
+                        className={cn(
+                          "p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-colors cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
+                        )}
                         title="Bajar"
                       >
                         <ChevronDown className="w-5 h-5" />
@@ -214,7 +218,7 @@ export function ProductionQueue({ editable = false }: ProductionQueueProps) {
                         : "bg-white/10 text-white/50"
                     }`}
                   >
-                    {isDone ? "✓" : index + 1}
+                    {isDone ? "OK" : index + 1}
                   </div>
 
                   {/* Info */}
@@ -231,7 +235,7 @@ export function ProductionQueue({ editable = false }: ProductionQueueProps) {
                       <span>{item.saladName}</span>
                       {item.saladName.toUpperCase().includes("PROMO") && !isDone && (
                         <span className="inline-flex items-center bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider animate-pulse shrink-0">
-                          ✨ FILM PROMO
+                          FILM PROMO
                         </span>
                       )}
                       <span className="text-white/30 mx-0.5">—</span>
@@ -261,7 +265,7 @@ export function ProductionQueue({ editable = false }: ProductionQueueProps) {
                     </p>
                     {goldMode && item.note && (
                       <p className="text-[10px] text-amber-400 font-bold mt-1 flex items-center gap-1">
-                        <span>📝</span>
+                        <span>Alerta:</span>
                         <span className="truncate max-w-[220px]">{item.note}</span>
                       </p>
                     )}
@@ -270,16 +274,16 @@ export function ProductionQueue({ editable = false }: ProductionQueueProps) {
                   {/* Controles de edición */}
                   {editable && (
                     <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                      {/* Editar (lápiz) - disponible si no está completado */}
+                      {/* Editar - disponible si no está completado */}
                       {(!isProducing || !isDone) && (
                         <button
                           type="button"
                           onClick={() => setEditingQueueItemId(item.id)}
-                          className="h-9 w-9 flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+                          className="h-8 px-2 flex items-center justify-center text-xs font-bold text-white/50 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
                           id={`queue-edit-${index}`}
                           title="Editar formato"
                         >
-                          ✏️
+                          Editar
                         </button>
                       )}
 
@@ -288,7 +292,7 @@ export function ProductionQueue({ editable = false }: ProductionQueueProps) {
                         <button
                           type="button"
                           onClick={() => removeFromQueue(index)}
-                          className="h-9 w-9 flex items-center justify-center text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                          className="h-8 w-8 flex items-center justify-center text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
                           id={`queue-remove-${index}`}
                           title="Eliminar"
                         >

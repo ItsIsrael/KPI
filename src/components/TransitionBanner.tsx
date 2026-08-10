@@ -174,7 +174,7 @@ export function TransitionBanner() {
             
             {/* Box Type en Grande */}
             <p className={cn("font-black text-2xl sm:text-3xl md:text-4xl uppercase tracking-wide", goldMode ? "text-amber-400" : "text-emerald-400")}>
-              📦 {current.boxType}
+              {current.boxType}
             </p>
 
             {/* Quantity en Grande */}
@@ -184,7 +184,7 @@ export function TransitionBanner() {
 
             {getActiveLote(queue, currentQueueIndex) && (
               <p className={cn("font-bold mt-1", goldMode ? "text-purple-300 text-base md:text-lg" : "text-purple-300 text-sm")}>
-                🔄 Lote: {getActiveLote(queue, currentQueueIndex)}
+                Lote: {getActiveLote(queue, currentQueueIndex)}
               </p>
             )}
             

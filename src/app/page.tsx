@@ -20,6 +20,7 @@ import { Calculator as CalcIcon, Maximize, Minimize, Trash2, Play, History, LogO
 import { LoginScreen } from "@/components/LoginScreen";
 import { ScreenLockOverlay } from "@/components/ScreenLockOverlay";
 import { MultiLineDashboard } from "@/components/MultiLineDashboard";
+import { QuickQueueBuilder } from "@/components/QuickQueueBuilder";
 import { subscribeToLineChanges } from "@/lib/supabase-service";
 import { useTabClock } from "@/hooks/useTabClock";
 
@@ -352,17 +353,17 @@ export default function Home() {
                 <h1 className="text-xl font-black tracking-tight leading-none flex items-center gap-1.5 text-foreground">
                   <span className={cn(goldMode && "text-gold-gradient")}>KPI</span>
                   {goldMode ? (
-                    <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(245,158,11,0.4)] tracking-wide uppercase shrink-0 animate-bounce">
-                      👑 GOLD
+                    <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(245,158,11,0.4)] tracking-wide uppercase shrink-0">
+                      GOLD
                     </span>
                   ) : (
                     <span className="bg-emerald-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow-sm tracking-wide uppercase shrink-0">
-                      🌱 FLORETTE
+                      FLORETTE
                     </span>
                   )}
                 </h1>
                 <p className={cn("text-[9px] font-bold uppercase tracking-[0.12em] leading-none mt-1 animate-pulse", goldMode ? "text-amber-400/80" : "text-emerald-700 dark:text-emerald-400")}>
-                  {goldMode ? "EDICIÓN PREMIUM" : "CONTROL DE PRODUCCIÓN"}
+                  {goldMode ? "EDICION PREMIUM" : "CONTROL DE PRODUCCION"}
                 </p>
               </div>
             </div>
@@ -415,8 +416,7 @@ export default function Home() {
                 title="Ver todas las líneas (Vista Fábrica)"
                 type="button"
               >
-                <span>🏢</span>
-                <span className="hidden sm:inline">Fábrica</span>
+                <span>Fábrica</span>
               </button>
             </div>
 
@@ -432,11 +432,7 @@ export default function Home() {
               title="Haz clic para cambiar entre el tema Florette y Premium Gold"
               type="button"
             >
-              {goldMode ? (
-                <><span>👑</span> <span>Gold</span></>
-              ) : (
-                <><span>🌱</span> <span>Florette</span></>
-              )}
+              {goldMode ? "Gold" : "Florette"}
             </button>
 
             {/* Pantalla completa */}
@@ -499,14 +495,21 @@ export default function Home() {
 
 
 
-        {/* Botón nueva ensalada */}
-        <Button
-          onClick={handleNewSalad}
-          className="w-full h-16 text-lg font-black bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white rounded-2xl shadow-lg shadow-emerald-500/20 transition-all active:scale-[0.98]"
-          id="new-salad-btn"
-        >
-          + Nueva Ensalada
-        </Button>
+        {/* Formulario Rápido de Cola para Operarios */}
+        <QuickQueueBuilder goldMode={goldMode} />
+
+        {/* Botón nueva ensalada completa / avanzada */}
+        <div className="flex justify-between items-center pt-1">
+          <span className="text-xs text-white/40 font-semibold">O crear lote complejo con múltiples formatos:</span>
+          <Button
+            onClick={handleNewSalad}
+            variant="outline"
+            className="h-10 px-4 text-xs font-bold border-white/10 bg-white/5 hover:bg-white/10 text-white rounded-xl transition-all cursor-pointer"
+            id="new-salad-btn"
+          >
+            + Formato Completo
+          </Button>
+        </div>
 
         {/* Lista de ensaladas (SIN FOTO) */}
         {salads.length > 0 && (
@@ -589,7 +592,7 @@ export default function Home() {
                         className="h-10 px-4 sm:px-0 sm:w-10 border-white/10 bg-white/5 text-white/60 hover:text-white hover:bg-white/10 rounded-xl"
                         id={`edit-salad-${salad.id}`}
                       >
-                        ✏️
+                        Editar
                       </Button>
                       <Button
                         onClick={() => removeSalad(salad.id)}
@@ -598,7 +601,7 @@ export default function Home() {
                         className="h-10 px-4 sm:px-0 sm:w-10 border-red-500/20 bg-red-500/5 text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded-xl"
                         id={`remove-salad-${salad.id}`}
                       >
-                        🗑️
+                        ✕
                       </Button>
                     </div>
                   </div>
@@ -853,8 +856,8 @@ export default function Home() {
             <header className="sticky top-0 z-40 bg-black/40 backdrop-blur-xl border-b border-white/10 p-3">
               <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-lg">
-                    🏢
+                  <div className="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-xs font-black text-purple-300">
+                    KPI
                   </div>
                   <div>
                     <h1 className="text-base sm:text-lg font-black text-white leading-tight">
@@ -874,7 +877,7 @@ export default function Home() {
                     </button>
                   ))}
                   <button className="px-2.5 py-1 rounded-lg text-xs font-black bg-purple-600 text-white shadow-sm cursor-default">
-                    🏢 Fábrica
+                    Fábrica
                   </button>
                 </div>
               </div>
