@@ -590,22 +590,37 @@ export default function Home() {
     return (
       <div
         className={cn(
-          "flex items-center justify-center min-h-screen w-full bg-[#05050a] text-white relative overflow-hidden transition-colors duration-300",
-          goldLoading ? "gold-mode" : ""
+          "flex items-center justify-center min-h-screen w-full relative overflow-hidden transition-colors duration-300",
+          goldLoading ? "gold-mode bg-[#05050a] text-white" : "bg-slate-50 text-slate-900"
         )}
       >
         {/* Background ambient glows */}
         <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 select-none opacity-80 glass-bg-blobs">
-          <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full bg-purple-500/20 blur-[130px] animate-pulse" style={{ animationDuration: "8s" }} />
-          <div className="absolute -bottom-40 -right-40 w-[600px] h-[600px] rounded-full bg-orange-500/12 blur-[130px] animate-pulse" style={{ animationDuration: "12s" }} />
-          <div className="absolute top-1/4 right-[5%] w-[400px] h-[400px] rounded-full bg-emerald-500/8 blur-[110px]" />
+          {goldLoading ? (
+            <>
+              <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full bg-purple-500/20 blur-[130px] animate-pulse" style={{ animationDuration: "8s" }} />
+              <div className="absolute -bottom-40 -right-40 w-[600px] h-[600px] rounded-full bg-orange-500/12 blur-[130px] animate-pulse" style={{ animationDuration: "12s" }} />
+              <div className="absolute top-1/4 right-[5%] w-[400px] h-[400px] rounded-full bg-emerald-500/8 blur-[110px]" />
+            </>
+          ) : (
+            <>
+              <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full bg-emerald-500/10 blur-[130px] animate-pulse" style={{ animationDuration: "8s" }} />
+              <div className="absolute -bottom-40 -right-40 w-[600px] h-[600px] rounded-full bg-teal-500/10 blur-[130px] animate-pulse" style={{ animationDuration: "12s" }} />
+            </>
+          )}
         </div>
 
         {/* Loading Card */}
         <div className="relative z-10 w-full max-w-sm px-4 animate-fade-in">
-          <div className="glass-card rounded-3xl p-8 text-center space-y-6 animate-slide-up">
+          <div className={cn(
+            "rounded-3xl p-8 text-center space-y-6 animate-slide-up border shadow-2xl backdrop-blur-md",
+            goldLoading ? "glass-card" : "bg-white/80 border-slate-200 shadow-emerald-900/5"
+          )}>
             {/* Logo Container */}
-            <div className="relative w-20 h-20 mx-auto rounded-2xl overflow-hidden border border-white/15 bg-black/40 flex items-center justify-center shadow-lg shadow-black/40">
+            <div className={cn(
+              "relative w-20 h-20 mx-auto rounded-2xl overflow-hidden flex items-center justify-center shadow-lg",
+              goldLoading ? "bg-black/40 border-white/15 shadow-black/40" : "bg-white border-slate-200 shadow-slate-200"
+            )}>
               {goldLoading && (
                 <span className="absolute inset-0 bg-amber-500/30 animate-pulse pointer-events-none" />
               )}
@@ -615,21 +630,21 @@ export default function Home() {
             {/* Title */}
             <div className="space-y-1.5">
               <h2 className="text-2xl font-black tracking-wide leading-none flex items-center justify-center gap-1.5">
-                <span className={cn(goldLoading && "text-gold-gradient")}>KPI</span>
+                <span className={cn(goldLoading ? "text-gold-gradient" : "text-[#0f291e]")}>KPI</span>
                 {goldLoading && (
                   <span className="bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[9px] font-black px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(245,158,11,0.4)] tracking-wide uppercase shrink-0 animate-bounce">
                     👑 GOLD
                   </span>
                 )}
               </h2>
-              <p className={cn("text-[10px] font-bold uppercase tracking-[0.15em] leading-none animate-pulse", goldLoading ? "text-amber-400/80" : "text-emerald-400/80")}>
+              <p className={cn("text-[10px] font-bold uppercase tracking-[0.15em] leading-none animate-pulse", goldLoading ? "text-amber-400/80" : "text-emerald-700")}>
                 {goldLoading ? "EDICIÓN PREMIUM" : "CONTROL DE PRODUCCIÓN"}
               </p>
             </div>
 
             {/* Progress line */}
             <div className="space-y-3 pt-2">
-              <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden border border-white/5 relative">
+              <div className={cn("h-1.5 w-full rounded-full overflow-hidden border relative", goldLoading ? "bg-white/5 border-white/5" : "bg-slate-100 border-slate-200")}>
                 <div 
                   className={cn(
                     "absolute top-0 bottom-0 left-0 bg-gradient-to-r rounded-full",
@@ -638,7 +653,7 @@ export default function Home() {
                   style={{ animation: "progress-load 0.6s ease-out forwards" }}
                 />
               </div>
-              <p className="text-[11px] text-white/35 font-medium">
+              <p className={cn("text-[11px] font-medium", goldLoading ? "text-white/35" : "text-slate-500")}>
                 Iniciando sistema...
               </p>
             </div>
