@@ -38,7 +38,7 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
   // Form states
   const [saladName, setSaladName] = useState<string>("César");
   const [selectedBoxType, setSelectedBoxType] = useState<string>(DEFAULT_BOX_TYPES[0].name);
-  const [quantity, setQuantity] = useState<string>("144");
+  const [quantity, setQuantity] = useState<string>("");
   const [noblejasPallets, setNoblejasPallets] = useState<string>("0");
   const [noblejasCajas, setNoblejasCajas] = useState<string>("0");
   const [boxesPerPallet, setBoxesPerPallet] = useState<number>(DEFAULT_BOX_TYPES[0].defaultBoxesPerPallet);
@@ -188,7 +188,7 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
     }
 
     // Resetear formulario para entrada rápida continua
-    setQuantity("144");
+    setQuantity("");
     setNoblejasPallets("0");
     setNoblejasCajas("0");
     setLote("");

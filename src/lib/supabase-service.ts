@@ -248,10 +248,12 @@ export async function syncQueueItems(lineId: string, queue: QueueItem[]) {
         lote: item.lote || null,
         cambio_lote: item.cambioLote || false,
         fecha_caducidad: item.fechaCaducidad || null,
-        updated_at: new Date().toISOString(),
       }));
 
-      await supabase.from("line_queue_items").upsert(rows, { onConflict: "id" });
+      const { error } = await supabase.from("line_queue_items").upsert(rows, { onConflict: "id" });
+      if (error) {
+        console.error("Supabase upsert error in syncQueueItems:", error.message, error.details, error.hint);
+      }
     }
 
     // 2. Limpiar items antiguos respetando la foreign key (borrando primero de queue_item_progress)
@@ -299,7 +301,7 @@ export async function syncProgress(queueItemId: string, progress: FormatProgress
       return;
     }
 
-    await supabase.from("queue_item_progress").upsert(
+    const { error } = await supabase.from("queue_item_progress").upsert(
       {
         queue_item_id: queueItemId,
         completed_pallets: progress.completedPallets,
@@ -312,10 +314,12 @@ export async function syncProgress(queueItemId: string, progress: FormatProgress
         last_pallet_timestamp: progress.lastPalletTimestamp,
         last_pallet_interval_ms: progress.lastPalletIntervalMs,
         declined_auto_advance: progress.declinedAutoAdvance || false,
-        updated_at: new Date().toISOString(),
       },
       { onConflict: "queue_item_id" }
     );
+    if (error) {
+      console.error("Supabase upsert error in syncProgress:", error.message, error.details, error.hint);
+    }
   } catch (e) {
     // Silenciar para evitar ruido de log en base de datos
   }
@@ -437,19 +441,52 @@ export function subscribeToLineChanges(
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "production_lines", filter: `id=eq.${lineId}` },
-      () => onLineChange()
+      (payload) => { console.log("Line change: production_lines", payload); onLineChange(); }
     )
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "line_queue_items", filter: `line_id=eq.${lineId}` },
-      () => onLineChange()
+      (payload) => { console.log("Line change: line_queue_items", payload); onLineChange(); }
     )
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "queue_item_progress" },
-      () => onLineChange()
+      (payload) => { console.log("Line change: queue_item_progress", payload); onLineChange(); }
     )
-    .subscribe();
+    .subscribe((status) => {
+      console.log(`Line Channel status [${lineId}]:`, status);
+    });
+
+  return () => {
+    supabase?.removeChannel(channel);
+  };
+}
+
+export function subscribeToGlobalChanges(onGlobalChange: () => void) {
+  if (!isSupabaseConfigured || !supabase) {
+    return () => {};
+  }
+
+  const channel = supabase
+    .channel('global-realtime')
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "production_lines" },
+      (payload) => { console.log("Global change: production_lines", payload); onGlobalChange(); }
+    )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "line_queue_items" },
+      (payload) => { console.log("Global change: line_queue_items", payload); onGlobalChange(); }
+    )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "queue_item_progress" },
+      (payload) => { console.log("Global change: queue_item_progress", payload); onGlobalChange(); }
+    )
+    .subscribe((status) => {
+      console.log("Global Channel status:", status);
+    });
 
   return () => {
     supabase?.removeChannel(channel);

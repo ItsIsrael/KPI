@@ -128,7 +128,16 @@ export default function Home() {
     const unsubscribe = subscribeToLineChanges(activeLineId, () => {
       loadActiveLineData();
     });
-    return () => unsubscribe();
+    
+    // Polling fallback every 3 seconds just in case Realtime is not enabled in DB
+    const interval = setInterval(() => {
+      loadActiveLineData();
+    }, 3000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, [activeLineId, activeLineCode]);
 
   // Escuchar cambios de fullscreen

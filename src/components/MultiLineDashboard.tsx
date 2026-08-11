@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { LineOverview, FormatProgress, Salad, QueueItem, HistoryItem } from "@/types/types";
 import { calculateFormat, DEFAULT_BOX_TYPES, generateId } from "@/types/types";
-import { getFactoryOverview, syncProgress, syncLineState, syncQueueItems, saveHistoryLog } from "@/lib/supabase-service";
+import { getFactoryOverview, syncProgress, syncLineState, syncQueueItems, saveHistoryLog, subscribeToGlobalChanges } from "@/lib/supabase-service";
 import { testSupabaseConnection, type SupabaseTestResult } from "@/lib/supabase-test";
 import { useProductionStore } from "@/store/production-store";
 import { cn } from "@/lib/utils";
@@ -57,7 +57,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
   const [quickAddLineCode, setQuickAddLineCode] = useState<string | null>(null);
   const [modalSaladName, setModalSaladName] = useState<string>("César");
   const [modalBoxType, setModalBoxType] = useState<string>("Cartón 4");
-  const [modalBoxes, setModalBoxes] = useState<string>("144");
+  const [modalBoxes, setModalBoxes] = useState<string>("");
   const [modalNoblejas, setModalNoblejas] = useState<string>("0");
   const [modalLote, setModalLote] = useState<string>("");
 
@@ -71,11 +71,13 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
         if (local && local.queue && local.queue.length > 0) {
           const currentItem = local.queue[local.currentQueueIndex] || local.queue[0];
           const localProg = currentItem ? local.queueProgress[currentItem.id] : undefined;
-          const dbProg = o.progress;
+          const isLocalRecent = localProg?.palletLastUpdated && (Date.now() - localProg.palletLastUpdated < 5000);
 
-          const prog = (localProg && (!dbProg || localProg.completedPallets >= (dbProg.completedPallets || 0)))
-            ? localProg
-            : (dbProg || localProg);
+          if (!isLocalRecent) {
+            return o;
+          }
+
+          const prog = localProg;
 
           if (currentItem && prog) {
             const calc = calculateFormat({
@@ -144,8 +146,15 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
   useEffect(() => {
     fetchOverview();
     handleTestConnection();
-    const interval = setInterval(fetchOverview, 3000);
-    return () => clearInterval(interval);
+    
+    // Subscribe to global realtime changes for instant dashboard updates
+    const unsubscribe = subscribeToGlobalChanges(() => {
+      fetchOverview();
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   // Quick Action Dinámica Milagro: Avanza Palet o Pico
@@ -362,7 +371,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
     if (!targetLine) return;
 
     const boxConfig = DEFAULT_BOX_TYPES.find((b) => b.name === modalBoxType) || DEFAULT_BOX_TYPES[0];
-    const totalQty = parseInt(modalBoxes, 10) || 144;
+    const totalQty = parseInt(modalBoxes, 10) || 0;
     const nobQty = parseInt(modalNoblejas, 10) || 0;
 
     const newFormat = {
@@ -381,52 +390,8 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
       formats: [newFormat],
     };
 
-    const newQueueItem: QueueItem = {
-      id: generateId(),
-      saladId: newSalad.id,
-      saladName: newSalad.name,
-      formatId: newFormat.id,
-      boxType: newFormat.boxType,
-      quantity: newFormat.quantity,
-      noblejas: newFormat.noblejas,
-      boxesPerPallet: newFormat.boxesPerPallet,
-      lote: newFormat.lote,
-      linea: quickAddLineCode,
-    };
-
-    const initialProg: FormatProgress = {
-      queueItemId: newQueueItem.id,
-      completedPallets: 0,
-      picoCompleted: false,
-      noblejasCompleted: false,
-      noblejasCompletedPallets: 0,
-      nobjelasPicoCompleted: false,
-      finished: false,
-      boxesAdjustment: 0,
-    };
-
-    const lineState = {
-      salads: [newSalad],
-      queue: [newQueueItem],
-      currentQueueIndex: 0,
-      currentProgress: initialProg,
-      queueProgress: { [newQueueItem.id]: initialProg },
-      isProducing: true,
-      formatStartTime: Date.now(),
-      palletSpeeds: [],
-    };
-
-    useProductionStore.setState((s) => ({
-      lineStorage: {
-        ...s.lineStorage,
-        [quickAddLineCode]: lineState,
-      },
-      ...(s.activeLineCode === quickAddLineCode ? lineState : {}),
-    }));
-
-    await syncQueueItems(targetLine.line.id, [newQueueItem]);
-    await syncLineState(targetLine.line.id, true, 0);
-    await syncProgress(newQueueItem.id, initialProg);
+    // Use the native store action to append to queue correctly without deleting everything else
+    await useProductionStore.getState().addSalad(newSalad, quickAddLineCode);
 
     setQuickAddLineCode(null);
     fetchOverview();
@@ -447,107 +412,97 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
   const isDuoView = viewMode === "PAIR_01" || viewMode === "PAIR_23" || (viewMode === "CUSTOM" && displayedLines.length <= 2);
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto px-2 sm:px-4 py-3">
-      {/* Cabecera del Monitor de Planta */}
-      <div className={cn(
-        "glass-card rounded-3xl p-4 sm:p-6 border relative overflow-hidden transition-all shadow-2xl space-y-4",
-        goldMode
-          ? "bg-[#141006]/95 border-amber-500/30 text-white"
-          : "bg-white/95 border-emerald-600/20 text-[#0f291e]"
-      )}>
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={cn(
-                "text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full border flex items-center gap-1.5 shadow-sm",
-                goldMode 
-                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40" 
-                  : "bg-emerald-600/10 text-emerald-700 border-emerald-600/30"
-              )}>
-                <span>🏢</span>
-                <span>🌿 Sala de Control y Monitorización</span>
-              </span>
+    <div className="space-y-4 max-w-[1600px] mx-auto px-2 sm:px-4 py-3 relative min-h-screen">
+      {/* Background Decorators for Glassmorphism */}
+      <div className="fixed inset-0 pointer-events-none -z-10 overflow-hidden">
+        <div className={cn("absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full mix-blend-multiply filter blur-[100px] opacity-50 animate-blob", goldMode ? "bg-amber-300" : "bg-emerald-200")} />
+        <div className={cn("absolute top-[20%] right-[-10%] w-[40%] h-[40%] rounded-full mix-blend-multiply filter blur-[100px] opacity-50 animate-blob animation-delay-2000", goldMode ? "bg-yellow-200" : "bg-teal-200")} />
+        <div className={cn("absolute bottom-[-20%] left-[20%] w-[50%] h-[50%] rounded-full mix-blend-multiply filter blur-[100px] opacity-50 animate-blob animation-delay-4000", goldMode ? "bg-orange-200" : "bg-green-200")} />
+      </div>
 
+      {/* Cabecera del Monitor de Planta (Limpia y Flotante) */}
+      <div className={cn(
+        "flex flex-col lg:flex-row items-center justify-between gap-4 p-4 rounded-2xl border backdrop-blur-xl transition-all shadow-lg",
+        goldMode
+          ? "bg-[#120e06]/60 border-amber-500/20 text-white"
+          : "bg-white/40 border-white/50 text-[#0f291e]"
+      )}>
+        <div className="flex items-center gap-3">
+          <div className={cn("p-2 rounded-xl", goldMode ? "bg-amber-500/20 text-amber-400" : "bg-emerald-500/20 text-emerald-700")}>
+            🏢
+          </div>
+          <div>
+            <h2 className="text-lg sm:text-xl font-black tracking-tight">
+              <span className={goldMode ? "text-gold-gradient" : "text-[#0f291e]"}>
+                {viewMode === "PAIR_01" ? "Supervisión K00-K01" : viewMode === "PAIR_23" ? "Supervisión K02-K03" : "Monitor General de Planta"}
+              </span>
+            </h2>
+            <div className="flex items-center gap-2 mt-0.5">
               {connectionTest && (
                 <span className={cn(
-                  "text-[10px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 transition-all shadow-sm",
+                  "text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1",
                   connectionTest.connected
-                    ? goldMode 
-                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                      : "bg-emerald-50 text-emerald-700 border-emerald-300"
-                    : "bg-amber-500/10 text-amber-600 border-amber-500/30"
+                    ? (goldMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-100 text-emerald-700")
+                    : (goldMode ? "bg-amber-500/10 text-amber-500" : "bg-amber-100 text-amber-700")
                 )}>
-                  {connectionTest.connected ? (
-                    <>
-                      <Wifi className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
-                      <span>⚡ Supabase Realtime ({connectionTest.latencyMs}ms)</span>
-                    </>
-                  ) : (
-                    <>
-                      <WifiOff className="w-3.5 h-3.5 text-amber-500" />
-                      <span>Modo Local</span>
-                    </>
-                  )}
+                  {connectionTest.connected ? <Wifi className="w-3 h-3 animate-pulse" /> : <WifiOff className="w-3 h-3" />}
+                  <span>{connectionTest.connected ? `En vivo (${connectionTest.latencyMs}ms)` : "Local"}</span>
                 </span>
               )}
             </div>
-
-            <h2 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight flex items-center gap-2 mt-0.5">
-              <span className={goldMode ? "text-gold-gradient" : "text-[#0f291e]"}>
-                {viewMode === "PAIR_01" ? "🌱 Supervisión de Líneas K00 & K01" : viewMode === "PAIR_23" ? "🌱 Supervisión de Líneas K02 & K03" : "🌿 Monitor General de Planta (4 Líneas)"}
-              </span>
-            </h2>
-            <p className={cn("text-xs", goldMode ? "text-white/50" : "text-[#475569]")}>
-              Control en vivo, avance de palets, picos y alertas de cadencia en directo
-            </p>
-          </div>
-
-          {/* Métricas consolidadas de planta */}
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <div className={cn(
-              "rounded-2xl px-3.5 py-2 text-center min-w-[95px] border shadow-sm",
-              goldMode ? "bg-white/5 border-white/10" : "bg-emerald-50/70 border-emerald-600/15"
-            )}>
-              <p className={cn("text-[9px] uppercase font-bold tracking-wider", goldMode ? "text-white/40" : "text-[#64748b]")}>
-                Líneas Activas
-              </p>
-              <p className="text-base sm:text-lg font-black text-emerald-600 tabular-nums">
-                {activeLinesCount} <span className={cn("text-xs", goldMode ? "text-white/40" : "text-[#94a3b8]")}>/ {overview.length || 4}</span>
-              </p>
-            </div>
-
-            <div className={cn(
-              "rounded-2xl px-3.5 py-2 text-center min-w-[110px] border shadow-sm",
-              goldMode ? "bg-white/5 border-white/10" : "bg-emerald-50/70 border-emerald-600/15"
-            )}>
-              <p className={cn("text-[9px] uppercase font-bold tracking-wider", goldMode ? "text-white/40" : "text-[#64748b]")}>
-                📦 Cajas en Planta
-              </p>
-              <p className={cn("text-base sm:text-lg font-black tabular-nums", goldMode ? "text-white" : "text-[#0f291e]")}>
-                {totalCompletedPlant} <span className={cn("text-xs", goldMode ? "text-white/40" : "text-[#94a3b8]")}>/ {totalBoxesPlant}</span>
-              </p>
-            </div>
-
-            <button
-              onClick={() => {
-                fetchOverview();
-                handleTestConnection();
-              }}
-              disabled={loading || isTestingConn}
-              className={cn(
-                "h-11 px-3.5 border rounded-2xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 text-xs font-bold shrink-0 shadow-sm",
-                goldMode
-                  ? "border-white/10 bg-white/5 hover:bg-white/10 text-white"
-                  : "border-emerald-600/20 bg-white hover:bg-emerald-50 text-[#0f291e]"
-              )}
-              title="Refrescar datos en vivo"
-              type="button"
-            >
-              <RefreshCw className={cn("w-4 h-4 text-emerald-600", (loading || isTestingConn) && "animate-spin")} />
-              <span className="hidden sm:inline">Refrescar</span>
-            </button>
           </div>
         </div>
+
+        {/* Métricas consolidadas de planta */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className={cn(
+            "rounded-xl px-3 py-1.5 text-center flex items-center gap-2 border",
+            goldMode ? "bg-white/5 border-white/10" : "bg-white/60 border-white/40 shadow-sm"
+          )}>
+            <span className={cn("text-[10px] uppercase font-bold", goldMode ? "text-white/40" : "text-[#64748b]")}>
+              Activas
+            </span>
+            <span className="text-sm font-black text-emerald-600">
+              {activeLinesCount}/{overview.length || 4}
+            </span>
+          </div>
+
+          <div className={cn(
+            "rounded-xl px-3 py-1.5 text-center flex items-center gap-2 border",
+            goldMode ? "bg-white/5 border-white/10" : "bg-white/60 border-white/40 shadow-sm"
+          )}>
+            <span className={cn("text-[10px] uppercase font-bold", goldMode ? "text-white/40" : "text-[#64748b]")}>
+              Cajas
+            </span>
+            <span className="text-sm font-black text-emerald-600">
+              {totalCompletedPlant}/{totalBoxesPlant}
+            </span>
+          </div>
+
+          <button
+            onClick={() => {
+              fetchOverview();
+              handleTestConnection();
+            }}
+            disabled={loading || isTestingConn}
+            className={cn(
+              "h-8 w-8 rounded-xl flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-sm border",
+              goldMode ? "border-white/10 bg-white/5 hover:bg-white/10 text-white" : "border-emerald-600/20 bg-white hover:bg-emerald-50 text-emerald-700"
+            )}
+            title="Refrescar"
+            type="button"
+          >
+            <RefreshCw className={cn("w-3.5 h-3.5", (loading || isTestingConn) && "animate-spin")} />
+          </button>
+        </div>
+      </div>
+
+      <div className={cn(
+        "glass-card rounded-2xl p-3 sm:p-4 border relative overflow-hidden transition-all shadow-xl space-y-4",
+        goldMode
+          ? "bg-[#141006]/80 border-amber-500/20 text-white"
+          : "bg-white/60 border-emerald-600/10 text-[#0f291e]"
+      )}>
 
         {/* Barra de Filtros */}
         <div className={cn(
@@ -700,15 +655,20 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           const hasNobPicoLeft = nobjelasPicoCajas > 0 && !prog.nobjelasPicoCompleted;
           const isNobDone = item.noblejasBoxes > 0 && !hasNobPalletsLeft && !hasNobPicoLeft;
 
+          // Estimación de tiempo por palet y alerta
+          const estimatedPalletMinutes = prog.lastPalletIntervalMs ? Math.round(prog.lastPalletIntervalMs / 60000) : 0;
+          const isDelayWarning = isProducing && estimatedPalletMinutes > 0 && minutesSinceLastPallet > (estimatedPalletMinutes * 0.75); // Alerta si supera el 75% del tiempo esperado
+
           return (
             <div
               key={item.line.id}
               onClick={() => onSelectLine(item.line.code)}
               className={cn(
-                "glass-card rounded-3xl p-5 sm:p-6 border transition-all duration-300 hover:shadow-2xl cursor-pointer relative overflow-hidden group space-y-4",
+                "rounded-3xl p-5 sm:p-6 border transition-all duration-300 hover:shadow-2xl cursor-pointer relative overflow-hidden group space-y-4",
+                !hasActiveOrders && "h-fit self-start",
                 goldMode
-                  ? "border-amber-500/25 hover:border-amber-500/50 bg-[#120e06]/90 text-white"
-                  : "border-emerald-600/20 hover:border-emerald-500 bg-white/95 text-[#0f291e] shadow-lg",
+                  ? "border-amber-500/25 hover:border-amber-500/50 bg-[#120e06]/60 backdrop-blur-xl text-white shadow-[0_8px_32px_0_rgba(245,158,11,0.1)]"
+                  : "border-white/50 hover:border-emerald-300 bg-white/50 backdrop-blur-xl text-[#0f291e] shadow-[0_8px_32px_0_rgba(16,185,129,0.08)]",
                 isFinished && (goldMode ? "ring-2 ring-amber-400 border-amber-400 bg-amber-950/20" : "ring-2 ring-emerald-500 border-emerald-500 bg-emerald-50/80"),
                 isProducing && "ring-1 ring-emerald-500/30 shadow-xl shadow-emerald-500/5",
                 isDuoView && "p-6 sm:p-7"
@@ -884,8 +844,13 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                     {(isDuoView || totalMilagroPallets > 0) && (
                       <div className={cn("pt-2 border-t space-y-1.5", goldMode ? "border-white/5" : "border-emerald-600/10")}>
                         <div className="flex items-center justify-between text-xs">
-                          <p className={cn("text-[10px] font-black uppercase tracking-wider", goldMode ? "text-white/40" : "text-[#64748b]")}>
-                            🪵 MATRIZ DE PALETS MILAGRO ({prog.completedPallets}/{totalMilagroPallets})
+                          <p className={cn("text-[10px] font-black uppercase tracking-wider flex items-center gap-2", goldMode ? "text-white/40" : "text-[#64748b]")}>
+                            <span>🪵 MATRIZ DE PALETS ({prog.completedPallets}/{totalMilagroPallets})</span>
+                            {estimatedPalletMinutes > 0 && (
+                              <span className={cn("normal-case tracking-normal border px-1.5 rounded-sm", isDelayWarning ? "border-red-400 text-red-500 font-bold bg-red-500/10 animate-pulse" : (goldMode ? "border-white/10 text-white/50" : "border-emerald-600/20 text-emerald-700/60"))}>
+                                {isDelayWarning ? `⚠️ Atrado: ${minutesSinceLastPallet}m / ${estimatedPalletMinutes}m` : `~${estimatedPalletMinutes}m/palet`}
+                              </span>
+                            )}
                           </p>
                           {milagroPicoCajas > 0 && (
                             <span className={cn("text-[10px] font-bold font-mono", prog.picoCompleted ? "text-emerald-500 font-black" : (goldMode ? "text-amber-400" : "text-emerald-700"))}>
@@ -1161,11 +1126,8 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                 </div>
               )}
 
-              {/* Pie de Tarjeta */}
-              <div className={cn("flex items-center justify-between pt-1 text-xs border-t", goldMode ? "border-white/5" : "border-emerald-600/10")}>
-                <span className={cn("text-[11px] font-mono", goldMode ? "text-white/40" : "text-[#64748b]")}>
-                  ⚡ Sincronizado vía WebSockets en vivo
-                </span>
+              {/* Pie de Tarjeta (Limpio) */}
+              <div className={cn("flex items-center justify-end pt-1 text-xs border-t", goldMode ? "border-white/5" : "border-emerald-600/10")}>
                 <span className="text-emerald-600 font-bold flex items-center gap-1 group-hover:translate-x-1 transition-transform">
                   <span>Ir a {item.line.code}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
