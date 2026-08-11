@@ -326,6 +326,7 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
                       : goldMode
                       ? "bg-white/[0.02] border-white/5 text-white/60 hover:bg-white/5 hover:text-white"
                       : "bg-white border-slate-200 text-slate-700 hover:bg-emerald-50 hover:border-emerald-300"
+                  )}
                 >
                   <span className="text-xs font-bold">{b.name}</span>
                 </button>
