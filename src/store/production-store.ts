@@ -17,7 +17,8 @@ import {
   syncLineState, 
   syncQueueItems, 
   syncProgress, 
-  saveHistoryLog 
+  saveHistoryLog,
+  hardResetLine,
 } from "@/lib/supabase-service";
 
 // Canal de sincronización local instantánea entre pestañas/monitores (<10ms)
@@ -183,6 +184,7 @@ interface ProductionState {
   history: HistoryItem[];
   clearHistory: () => void;
   wipeAllData: () => void;
+  hardResetDatabase: () => Promise<void>;
 
   // ===== ACCIONES: TEMPLATES (FAVORITOS) =====
   templates: TemplateItem[];
@@ -1165,6 +1167,33 @@ export const useProductionStore = create<ProductionState>()(
           history: [],
           templates: [],
         }),
+
+      hardResetDatabase: async () => {
+        const { activeLineId, activeLineCode } = get();
+        if (activeLineId) {
+          await hardResetLine(activeLineId);
+        }
+        
+        const emptyState = {
+          salads: [],
+          queue: [],
+          currentQueueIndex: 0,
+          currentProgress: null,
+          queueProgress: {},
+          isProducing: false,
+          formatStartTime: null,
+          palletSpeeds: [],
+        };
+        
+        set((state) => ({
+          ...emptyState,
+          lineStorage: {
+            ...state.lineStorage,
+            [activeLineCode]: emptyState,
+          },
+        }));
+        broadcastLocalChange(activeLineCode);
+      },
 
       // ===== ACCIONES: TEMPLATES (FAVORITOS) =====
       addTemplate: (item) =>

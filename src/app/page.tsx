@@ -54,6 +54,7 @@ export default function Home() {
     loadTemplate,
     reproduceFromHistory,
     wipeAllData,
+    hardResetDatabase,
     clearQueueAndSalads,
     isLoggedIn,
     logout,
@@ -553,8 +554,24 @@ export default function Home() {
       </div>
 
       {/* Footer */}
-      <footer className="border-t border-white/5 py-4 px-4 text-center space-y-2">
-        <p className="text-xs text-white/20">
+      <footer className="border-t border-white/5 py-4 px-4 flex justify-between items-center text-xs text-white/20">
+        <button
+          onClick={() => {
+            const pwd = window.prompt("Introduce la contraseña de administrador para forzar el borrado de la base de datos de esta línea:");
+            if (pwd === "piloto") {
+              if (window.confirm("⚠️ ADVERTENCIA: Esto borrará por completo la base de datos de esta línea. ¿Estás seguro?")) {
+                hardResetDatabase();
+              }
+            } else if (pwd !== null) {
+              alert("Contraseña incorrecta.");
+            }
+          }}
+          className="px-3 py-1.5 rounded-lg border border-red-500/20 bg-red-500/5 text-red-500/50 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 transition-all cursor-pointer font-semibold shadow-sm"
+          title="Forzar borrado de la base de datos (Requiere contraseña)"
+        >
+          Borrado Forzado DB
+        </button>
+        <p>
           Desarrollado por{" "}
           <a
             href="https://isra.dev"

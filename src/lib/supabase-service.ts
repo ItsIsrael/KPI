@@ -293,6 +293,29 @@ export async function syncQueueItems(lineId: string, queue: QueueItem[]) {
   }
 }
 
+export async function hardResetLine(lineId: string) {
+  if (!isSupabaseConfigured || !supabase || lineId.startsWith("local-")) return;
+  try {
+    const { data: allLineItems } = await supabase
+      .from("line_queue_items")
+      .select("id")
+      .eq("line_id", lineId);
+
+    if (allLineItems && allLineItems.length > 0) {
+      const allIds = allLineItems.map((o) => o.id);
+      await supabase.from("queue_item_progress").delete().in("queue_item_id", allIds);
+      await supabase.from("line_queue_items").delete().in("id", allIds);
+    }
+    
+    await supabase
+      .from("production_lines")
+      .update({ is_producing: false })
+      .eq("id", lineId);
+  } catch (e) {
+    console.error("Error en hardResetLine:", e);
+  }
+}
+
 export async function syncProgress(queueItemId: string, progress: FormatProgress) {
   if (!isSupabaseConfigured || !supabase || queueItemId.startsWith("local-")) return;
 
