@@ -314,7 +314,7 @@ export async function syncProgress(queueItemId: string, progress: FormatProgress
         boxes_adjustment: progress.boxesAdjustment || 0,
         finished: progress.finished,
         pallet_last_updated: progress.palletLastUpdated || null,
-        last_pallet_timestamp: progress.lastPalletTimestamp || null,
+        last_pallet_timestamp: progress.lastPalletTimestamp ? new Date(progress.lastPalletTimestamp).toISOString() : null,
         last_pallet_interval_ms: progress.lastPalletIntervalMs,
         declined_auto_advance: progress.declinedAutoAdvance || false,
       },
