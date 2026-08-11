@@ -351,11 +351,8 @@ export const useProductionStore = create<ProductionState>()(
                 ...lineState,
                 lineStorage: { ...s.lineStorage, [activeLineCode]: lineState },
               }));
-            } else if (currentLocalQueue && currentLocalQueue.length > 0) {
-              // Si la base de datos respondió vacía pero hay cola local, sincronizar hacia Supabase para evitar pérdidas
-              await syncQueueItems(currentLine.id, currentLocalQueue);
             } else {
-              // La línea realmente está vacía y no tiene cola local
+              // La línea realmente está vacía y no tiene cola local (o fue borrada en la BD)
               const emptyState = {
                 queue: [],
                 salads: [],
