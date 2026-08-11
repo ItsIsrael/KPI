@@ -483,19 +483,19 @@ export default function Home() {
         {/* KPI Dashboard */}
         {salads.length > 0 && (
           <section className="grid grid-cols-3 gap-3">
-            <div className="glass-card rounded-2xl p-4 text-center">
+            <div className="glass-card rounded-2xl p-4 text-center overflow-hidden">
               <p className="text-[10px] text-white/30 uppercase tracking-widest font-semibold mb-1">Ensaladas</p>
-              <p className="text-3xl font-black text-white">{salads.length}</p>
+              <p className="text-2xl sm:text-3xl font-black text-white truncate px-1">{salads.length}</p>
               <p className="text-[10px] text-white/20 mt-0.5">{totalFormats} formatos</p>
             </div>
-            <div className="glass-card rounded-2xl p-4 text-center">
+            <div className="glass-card rounded-2xl p-4 text-center overflow-hidden">
               <p className="text-[10px] text-white/30 uppercase tracking-widest font-semibold mb-1">Total Cajas</p>
-              <p className="text-3xl font-black text-emerald-400">{totalBoxes.toLocaleString()}</p>
+              <p className="text-2xl sm:text-3xl font-black text-emerald-400 truncate px-1">{totalBoxes.toLocaleString()}</p>
               <p className="text-[10px] text-emerald-400/30 mt-0.5">unidades</p>
             </div>
-            <div className="glass-card rounded-2xl p-4 text-center">
+            <div className="glass-card rounded-2xl p-4 text-center overflow-hidden">
               <p className="text-[10px] text-white/30 uppercase tracking-widest font-semibold mb-1">Total Palets</p>
-              <p className="text-3xl font-black text-teal-400">{totalPallets}</p>
+              <p className="text-2xl sm:text-3xl font-black text-teal-400 truncate px-1">{totalPallets}</p>
               <p className="text-[10px] text-teal-400/30 mt-0.5">estimados</p>
             </div>
           </section>
@@ -571,57 +571,7 @@ export default function Home() {
             isra.dev
           </a>
         </p>
-        <div>
-          <button
-            onClick={() => setShowWipeModal(true)}
-            className="text-[9px] uppercase tracking-wider font-bold text-red-500/20 hover:text-red-400 hover:bg-red-500/10 px-2 py-1 rounded-lg transition-all cursor-pointer"
-            type="button"
-          >
-            ⚠️ Borrado de datos
-          </button>
-        </div>
       </footer>
-
-      {/* Modal Confirmación Borrado de Datos */}
-      {showWipeModal && (
-        <div
-          onClick={() => setShowWipeModal(false)}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-[#181010]/95 backdrop-blur-2xl border border-red-500/20 rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl text-center space-y-5 my-auto"
-          >
-            <div className="w-14 h-14 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-2xl mx-auto shadow-xl shadow-red-500/5">
-              🚨
-            </div>
-            <div className="space-y-2">
-              <h2 className="text-xl font-black text-white">¿Borrar todos los datos?</h2>
-              <p className="text-white/60 text-xs leading-relaxed">
-                Esta acción es permanente y no se puede deshacer. Se borrarán todas las ensaladas preparadas, la cola de producción y el historial por completo.
-              </p>
-            </div>
-            <div className="flex gap-3 pt-2">
-              <Button
-                onClick={() => setShowWipeModal(false)}
-                variant="outline"
-                className="flex-1 h-12 border-white/10 bg-white/5 text-white/80 hover:bg-white/10 rounded-xl font-bold text-sm"
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={() => {
-                  wipeAllData();
-                  setShowWipeModal(false);
-                }}
-                className="flex-1 h-12 bg-gradient-to-r from-red-500 to-orange-600 hover:from-red-400 hover:to-orange-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-red-500/20"
-              >
-                Sí, borrar todo
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 
