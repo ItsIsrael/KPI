@@ -281,7 +281,7 @@ export function ProductionControls() {
           }}
           disabled={!canAdd}
           className={cn(
-            "col-span-2 min-h-[4rem] md:min-h-[5rem] py-2 text-xl md:text-2xl font-black rounded-2xl transition-all duration-150 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed flex flex-col justify-center items-center relative overflow-hidden",
+            "col-span-2 min-h-[4rem] md:min-h-[5rem] py-2 text-xl md:text-2xl font-black rounded-2xl transition-all duration-300 ease-out active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed flex flex-col justify-center items-center relative overflow-hidden",
             canAdd
               ? activeBgClass
               : goldMode ? "bg-white/5 border border-white/10 text-white/20" : "bg-slate-100 border border-slate-300 text-slate-400"

@@ -514,16 +514,28 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                 {viewMode === "PAIR_01" ? "Supervisión K00-K01" : viewMode === "PAIR_23" ? "Supervisión K02-K03" : "Monitor General de Planta"}
               </span>
             </h2>
-            <div className="flex items-center gap-2 mt-0.5">
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               {connectionTest && (
                 <span className={cn(
-                  "text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1",
+                  "text-[10px] font-bold px-2.5 py-1 rounded-md flex items-center gap-1.5 border shadow-sm transition-all duration-300",
                   connectionTest.connected
-                    ? (goldMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-100 text-emerald-700")
-                    : (goldMode ? "bg-amber-500/10 text-amber-500" : "bg-amber-100 text-amber-700")
+                    ? (goldMode ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-emerald-50 text-emerald-700 border-emerald-200")
+                    : (goldMode ? "bg-red-500/10 text-red-500 border-red-500/20" : "bg-red-50 text-red-700 border-red-200")
                 )}>
-                  {connectionTest.connected ? <Wifi className="w-3 h-3 animate-pulse" /> : <WifiOff className="w-3 h-3" />}
-                  <span>{connectionTest.connected ? `En vivo (${connectionTest.latencyMs}ms)` : "Local"}</span>
+                  {connectionTest.connected ? (
+                    <>
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </span>
+                      <span>Sincronizado en Tiempo Real ({connectionTest.latencyMs}ms)</span>
+                    </>
+                  ) : (
+                    <>
+                      <WifiOff className="w-3.5 h-3.5" />
+                      <span>Desconectado / Error BD</span>
+                    </>
+                  )}
                 </span>
               )}
             </div>
