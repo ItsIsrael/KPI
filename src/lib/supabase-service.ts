@@ -314,7 +314,7 @@ export async function syncProgress(queueItemId: string, progress: FormatProgress
         boxes_adjustment: progress.boxesAdjustment || 0,
         finished: progress.finished,
         pallet_last_updated: progress.palletLastUpdated ? new Date(progress.palletLastUpdated).toISOString() : null,
-        last_pallet_timestamp: progress.lastPalletTimestamp,
+        last_pallet_timestamp: progress.lastPalletTimestamp ? new Date(progress.lastPalletTimestamp).toISOString() : null,
         last_pallet_interval_ms: progress.lastPalletIntervalMs,
         declined_auto_advance: progress.declinedAutoAdvance || false,
       },
@@ -324,7 +324,7 @@ export async function syncProgress(queueItemId: string, progress: FormatProgress
       console.error("Supabase upsert error in syncProgress:", error.message, error.details, error.hint);
     }
   } catch (e) {
-    // Silenciar para evitar ruido de log en base de datos
+    console.error("Critical error in syncProgress:", e);
   }
 }
 

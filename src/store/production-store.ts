@@ -1294,84 +1294,42 @@ export const useProductionStore = create<ProductionState>()(
       logout: () =>
         set({ isLoggedIn: true }),
 
-      updateQueueItem: (id, updates) =>
-        set((state) => {
-          const newQueue = state.queue.map((item) =>
-            item.id === id ? { ...item, ...updates } : item
-          );
+      updateQueueItem: async (id, updates) => {
+        const state = get();
+        const newQueue = state.queue.map((item) =>
+          item.id === id ? { ...item, ...updates } : item
+        );
 
-          let nextProgress = state.currentProgress;
-          const updatedQueueProgress = { ...(state.queueProgress || {}) };
-          
-          // Si estamos editando el item actual en producción, ajustar el progreso
-          if (nextProgress && nextProgress.queueItemId === id) {
-            const currentItem = newQueue.find((item) => item.id === id);
-            if (currentItem) {
-              const calc = calculateFormat({
-                id: currentItem.formatId,
-                boxType: currentItem.boxType,
-                quantity: currentItem.quantity,
-                noblejas: currentItem.noblejas,
-                boxesPerPallet: currentItem.boxesPerPallet,
-              });
-
-              const nobPalletsMax = Math.floor(currentItem.noblejas / currentItem.boxesPerPallet);
-              const nobPicoMax = currentItem.noblejas % currentItem.boxesPerPallet;
-
-              // Clamp completed pallets/noblejas to new maximums
-              const completedPallets = Math.min(nextProgress.completedPallets, calc.pallets);
-              const noblejasCompletedPallets = Math.min(
-                nextProgress.noblejasCompletedPallets,
-                nobPalletsMax
-              );
-
-              // Reset pico/noblejas pico completed if they are now 0, or keep their values
-              const picoCompleted = calc.pico > 0 ? nextProgress.picoCompleted : false;
-              const nobjelasPicoCompleted = nobPicoMax > 0 ? nextProgress.nobjelasPicoCompleted : false;
-
-              // Recalculate finished status
-              const isNoblejasDone =
-                noblejasCompletedPallets >= nobPalletsMax &&
-                (nobPicoMax === 0 || nobjelasPicoCompleted);
-              const isPalletsDone = completedPallets >= calc.pallets;
-              const isPicoDone = calc.pico === 0 || picoCompleted;
-              const finished = isNoblejasDone && isPalletsDone && isPicoDone;
-
-              nextProgress = {
-                ...nextProgress,
-                completedPallets,
-                noblejasCompletedPallets,
-                picoCompleted,
-                nobjelasPicoCompleted,
-                noblejasCompleted: isNoblejasDone,
-                finished,
-              };
-            }
-          }
-
-          const item = newQueue.find((i) => i.id === id);
-          if (item && updatedQueueProgress[id]) {
-            const itemProgress = updatedQueueProgress[id];
+        let nextProgress = state.currentProgress;
+        const updatedQueueProgress = { ...(state.queueProgress || {}) };
+        
+        // Si estamos editando el item actual en producción, ajustar el progreso
+        if (nextProgress && nextProgress.queueItemId === id) {
+          const currentItem = newQueue.find((item) => item.id === id);
+          if (currentItem) {
             const calc = calculateFormat({
-              id: item.formatId,
-              boxType: item.boxType,
-              quantity: item.quantity,
-              noblejas: item.noblejas,
-              boxesPerPallet: item.boxesPerPallet,
+              id: currentItem.formatId,
+              boxType: currentItem.boxType,
+              quantity: currentItem.quantity,
+              noblejas: currentItem.noblejas,
+              boxesPerPallet: currentItem.boxesPerPallet,
             });
 
-            const nobPalletsMax = Math.floor(item.noblejas / item.boxesPerPallet);
-            const nobPicoMax = item.noblejas % item.boxesPerPallet;
+            const nobPalletsMax = Math.floor(currentItem.noblejas / currentItem.boxesPerPallet);
+            const nobPicoMax = currentItem.noblejas % currentItem.boxesPerPallet;
 
-            const completedPallets = Math.min(itemProgress.completedPallets, calc.pallets);
+            // Clamp completed pallets/noblejas to new maximums
+            const completedPallets = Math.min(nextProgress.completedPallets, calc.pallets);
             const noblejasCompletedPallets = Math.min(
-              itemProgress.noblejasCompletedPallets,
+              nextProgress.noblejasCompletedPallets,
               nobPalletsMax
             );
 
-            const picoCompleted = calc.pico > 0 ? itemProgress.picoCompleted : false;
-            const nobjelasPicoCompleted = nobPicoMax > 0 ? itemProgress.nobjelasPicoCompleted : false;
+            // Reset pico/noblejas pico completed if they are now 0, or keep their values
+            const picoCompleted = calc.pico > 0 ? nextProgress.picoCompleted : false;
+            const nobjelasPicoCompleted = nobPicoMax > 0 ? nextProgress.nobjelasPicoCompleted : false;
 
+            // Recalculate finished status
             const isNoblejasDone =
               noblejasCompletedPallets >= nobPalletsMax &&
               (nobPicoMax === 0 || nobjelasPicoCompleted);
@@ -1379,8 +1337,8 @@ export const useProductionStore = create<ProductionState>()(
             const isPicoDone = calc.pico === 0 || picoCompleted;
             const finished = isNoblejasDone && isPalletsDone && isPicoDone;
 
-            const newProg = {
-              ...itemProgress,
+            nextProgress = {
+              ...nextProgress,
               completedPallets,
               noblejasCompletedPallets,
               picoCompleted,
@@ -1388,19 +1346,79 @@ export const useProductionStore = create<ProductionState>()(
               noblejasCompleted: isNoblejasDone,
               finished,
             };
+          }
+        }
 
-            updatedQueueProgress[id] = newProg;
-            if (id === state.currentProgress?.queueItemId) {
-              nextProgress = newProg;
+        const item = newQueue.find((i) => i.id === id);
+        if (item && updatedQueueProgress[id]) {
+          const itemProgress = updatedQueueProgress[id];
+          const calc = calculateFormat({
+            id: item.formatId,
+            boxType: item.boxType,
+            quantity: item.quantity,
+            noblejas: item.noblejas,
+            boxesPerPallet: item.boxesPerPallet,
+          });
+
+          const nobPalletsMax = Math.floor(item.noblejas / item.boxesPerPallet);
+          const nobPicoMax = item.noblejas % item.boxesPerPallet;
+
+          const completedPallets = Math.min(itemProgress.completedPallets, calc.pallets);
+          const noblejasCompletedPallets = Math.min(
+            itemProgress.noblejasCompletedPallets,
+            nobPalletsMax
+          );
+
+          const picoCompleted = calc.pico > 0 ? itemProgress.picoCompleted : false;
+          const nobjelasPicoCompleted = nobPicoMax > 0 ? itemProgress.nobjelasPicoCompleted : false;
+
+          const isNoblejasDone =
+            noblejasCompletedPallets >= nobPalletsMax &&
+            (nobPicoMax === 0 || nobjelasPicoCompleted);
+          const isPalletsDone = completedPallets >= calc.pallets;
+          const isPicoDone = calc.pico === 0 || picoCompleted;
+          const finished = isNoblejasDone && isPalletsDone && isPicoDone;
+
+          const newProg = {
+            ...itemProgress,
+            completedPallets,
+            noblejasCompletedPallets,
+            picoCompleted,
+            nobjelasPicoCompleted,
+            noblejasCompleted: isNoblejasDone,
+            finished,
+          };
+
+          updatedQueueProgress[id] = newProg;
+          if (id === state.currentProgress?.queueItemId) {
+            nextProgress = newProg;
+          }
+        }
+
+        if (state.activeLineId) {
+          await syncQueueItems(state.activeLineId, newQueue);
+          if (updatedQueueProgress[id]) {
+            await syncProgress(id, updatedQueueProgress[id]);
+          }
+        }
+
+        set((s) => ({
+          queue: newQueue,
+          currentProgress: nextProgress,
+          queueProgress: updatedQueueProgress,
+          lineStorage: {
+            ...s.lineStorage,
+            [s.activeLineCode]: {
+              ...(s.lineStorage[s.activeLineCode] || ({} as any)),
+              queue: newQueue,
+              currentProgress: nextProgress,
+              queueProgress: updatedQueueProgress,
             }
           }
-
-          return {
-            queue: newQueue,
-            currentProgress: nextProgress,
-            queueProgress: updatedQueueProgress,
-          };
-        }),
+        }));
+        
+        broadcastLocalChange(state.activeLineCode);
+      },
 
       updateLineItemProgress: (lineCode: string, queueItemId: string, progress: FormatProgress) => {
         const state = get();
