@@ -215,14 +215,17 @@ export async function syncLineState(
 ) {
   if (!isSupabaseConfigured || !supabase || lineId.startsWith("local-")) return;
 
-  await supabase
+  const { error } = await supabase
     .from("production_lines")
     .update({
       is_producing: isProducing,
       current_queue_index: currentQueueIndex,
-      updated_at: new Date().toISOString(),
     })
     .eq("id", lineId);
+    
+  if (error) {
+    console.error("Supabase update error in syncLineState:", error.message, error.details);
+  }
 }
 
 export async function syncQueueItems(lineId: string, queue: QueueItem[]) {

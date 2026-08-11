@@ -307,59 +307,131 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
     // Guardar en log de historial
     await saveHistoryLog(item.line.id, historyItem);
 
-    // Limpiar estado en memoria local y store
-    const emptyState = {
-      salads: [],
-      queue: [],
-      currentQueueIndex: 0,
-      currentProgress: null,
-      queueProgress: {},
-      isProducing: false,
-      formatStartTime: null,
-      palletSpeeds: [],
-    };
-
     const store = useProductionStore.getState();
-    useProductionStore.setState((s) => ({
-      lineStorage: {
-        ...s.lineStorage,
-        [item.line.code]: emptyState,
-      },
-      history: [historyItem, ...(s.history || [])].slice(0, 30),
-      ...(s.activeLineCode === item.line.code ? emptyState : {}),
-    }));
+    const local = store.lineStorage[item.line.code] || {};
+    const currentQueue = local.queue || [];
+    const remainingQueue = currentQueue.slice(1);
 
-    // Sincronizar con Supabase
-    await syncLineState(item.line.id, false, 0);
-    await syncQueueItems(item.line.id, []);
+    if (remainingQueue.length > 0) {
+      // Avanzar al siguiente formato de la cola
+      const nextItem = remainingQueue[0];
+      const nextProgress = local.queueProgress?.[nextItem.id] || {
+        queueItemId: nextItem.id,
+        completedPallets: 0,
+        picoCompleted: false,
+        noblejasCompleted: false,
+        noblejasCompletedPallets: 0,
+        nobjelasPicoCompleted: false,
+        finished: false,
+      };
 
-    // Actualizar UI inmediatamente
-    setOverview((prev) =>
-      prev.map((o) => {
-        if (o.line.id !== item.line.id) return o;
-        return {
-          ...o,
-          currentSaladName: undefined,
-          currentBoxType: undefined,
-          currentLote: undefined,
-          totalBoxes: 0,
-          completedBoxes: 0,
-          totalPallets: 0,
-          completedPallets: 0,
-          noblejasBoxes: 0,
-          noblejasDoneBoxes: 0,
-          percent: 0,
-          queueLength: 0,
-          pendingCount: 0,
-          currentItem: undefined,
-          nextItem: undefined,
-          calc: undefined,
-          progress: undefined,
-          queue: [],
-          line: { ...o.line, isProducing: false },
-        };
-      })
-    );
+      const nextLineState = {
+        ...local,
+        queue: remainingQueue,
+        currentQueueIndex: 0,
+        currentProgress: nextProgress,
+        isProducing: true,
+        formatStartTime: Date.now(),
+        palletSpeeds: [],
+      };
+
+      useProductionStore.setState((s) => ({
+        lineStorage: {
+          ...s.lineStorage,
+          [item.line.code]: nextLineState,
+        },
+        history: [historyItem, ...(s.history || [])].slice(0, 30),
+        queueProgress: {
+          ...(s.queueProgress || {}),
+          [nextItem.id]: nextProgress,
+        },
+        ...(s.activeLineCode === item.line.code ? nextLineState : {}),
+      }));
+
+      // Sincronizar con Supabase
+      await syncLineState(item.line.id, true, 0);
+      await syncQueueItems(item.line.id, remainingQueue);
+
+      // Actualizar UI inmediatamente
+      setOverview((prev) =>
+        prev.map((o) => {
+          if (o.line.id !== item.line.id) return o;
+          return {
+            ...o,
+            currentSaladName: nextItem.saladName,
+            currentBoxType: nextItem.boxType,
+            currentLote: nextItem.lote,
+            totalBoxes: nextItem.quantity,
+            completedBoxes: 0,
+            totalPallets: Math.floor(nextItem.quantity / nextItem.boxesPerPallet),
+            completedPallets: 0,
+            noblejasBoxes: nextItem.noblejas,
+            noblejasDoneBoxes: 0,
+            percent: 0,
+            queueLength: remainingQueue.length,
+            pendingCount: remainingQueue.length - 1,
+            currentItem: nextItem,
+            nextItem: remainingQueue.length > 1 ? remainingQueue[1] : undefined,
+            progress: nextProgress,
+            queue: remainingQueue,
+            line: { ...o.line, isProducing: true },
+          };
+        })
+      );
+    } else {
+      // Limpiar estado completo porque ya no hay nada en la cola
+      const emptyState = {
+        salads: local.salads || [],
+        queue: [],
+        currentQueueIndex: 0,
+        currentProgress: null,
+        queueProgress: {},
+        isProducing: false,
+        formatStartTime: null,
+        palletSpeeds: [],
+      };
+
+      useProductionStore.setState((s) => ({
+        lineStorage: {
+          ...s.lineStorage,
+          [item.line.code]: emptyState,
+        },
+        history: [historyItem, ...(s.history || [])].slice(0, 30),
+        ...(s.activeLineCode === item.line.code ? emptyState : {}),
+      }));
+
+      // Sincronizar con Supabase
+      await syncLineState(item.line.id, false, 0);
+      await syncQueueItems(item.line.id, []);
+
+      // Actualizar UI inmediatamente
+      setOverview((prev) =>
+        prev.map((o) => {
+          if (o.line.id !== item.line.id) return o;
+          return {
+            ...o,
+            currentSaladName: undefined,
+            currentBoxType: undefined,
+            currentLote: undefined,
+            totalBoxes: 0,
+            completedBoxes: 0,
+            totalPallets: 0,
+            completedPallets: 0,
+            noblejasBoxes: 0,
+            noblejasDoneBoxes: 0,
+            percent: 0,
+            queueLength: 0,
+            pendingCount: 0,
+            currentItem: undefined,
+            nextItem: undefined,
+            calc: undefined,
+            progress: undefined,
+            queue: [],
+            line: { ...o.line, isProducing: false },
+          };
+        })
+      );
+    }
 
     setActionLoadingId(null);
   };
