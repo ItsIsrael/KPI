@@ -35,9 +35,8 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
     }
   }, [activeLineCode]);
 
-  // Form states
   const [saladName, setSaladName] = useState<string>("César");
-  const [selectedBoxType, setSelectedBoxType] = useState<string>(DEFAULT_BOX_TYPES[0].name);
+  const [selectedBoxType, setSelectedBoxType] = useState<string>("Cartón 6");
   const [quantity, setQuantity] = useState<string>("");
   const [noblejasPallets, setNoblejasPallets] = useState<string>("0");
   const [noblejasCajas, setNoblejasCajas] = useState<string>("0");
@@ -327,10 +326,8 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
                       : goldMode
                       ? "bg-white/[0.02] border-white/5 text-white/60 hover:bg-white/5 hover:text-white"
                       : "bg-white border-slate-200 text-slate-700 hover:bg-emerald-50 hover:border-emerald-300"
-                  )}
                 >
                   <span className="text-xs font-bold">{b.name}</span>
-                  <span className={cn("text-[10px] font-mono", goldMode ? "text-white/40" : "text-slate-500")}>{b.defaultBoxesPerPallet} c/palet</span>
                 </button>
               );
             })}
