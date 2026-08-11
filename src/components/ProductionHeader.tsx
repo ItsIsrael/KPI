@@ -95,8 +95,8 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5">
           
           {/* Fila Superior (Mobile): Info Ensalada y Reloj */}
-          <div className="flex items-center justify-between w-full md:w-auto gap-2.5">
-            <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center justify-between w-full lg:w-auto gap-2.5">
+            <div className="flex items-center gap-2.5 flex-wrap flex-1">
               <div
                 className={cn("w-2.5 h-2.5 rounded-full animate-pulse shrink-0", transitionDot[transition])}
               />
@@ -115,12 +115,12 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
               
               <h1 className="text-base sm:text-lg md:text-xl font-black tracking-wide flex items-center gap-1.5 flex-wrap text-foreground">
                 <span className="shrink-0">🥗</span>
-                <span className={cn("truncate max-w-[100px] xs:max-w-[160px] sm:max-w-none shrink-0", goldMode && "text-gold-gradient")}>
+                <span className={cn("truncate max-w-[120px] xs:max-w-[180px] sm:max-w-none shrink-0", goldMode && "text-gold-gradient")}>
                   {current.saladName}
                 </span>
                 <span className="opacity-30 font-normal shrink-0">|</span>
                 <span className="shrink-0">📦</span>
-                <span className={cn("font-bold truncate max-w-[70px] xs:max-w-[110px] sm:max-w-none shrink-0", goldMode ? "text-amber-400" : "text-emerald-600 dark:text-emerald-400")}>
+                <span className={cn("font-bold truncate max-w-[80px] xs:max-w-[120px] sm:max-w-none shrink-0", goldMode ? "text-amber-400" : "text-emerald-600 dark:text-emerald-400")}>
                   {current.boxType}
                 </span>
                 {goldMode && getActiveLote(queue, currentQueueIndex) && (
@@ -143,7 +143,7 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
               <button
                 onClick={onOpenLabelsModal}
                 className={cn(
-                  "ml-auto sm:ml-2 px-2 py-0.5 rounded-lg text-[9px] sm:text-[10px] font-black border uppercase flex items-center gap-1 transition-all shadow-md cursor-pointer shrink-0",
+                  "ml-auto lg:ml-2 px-2 py-0.5 rounded-lg text-[9px] sm:text-[10px] font-black border uppercase flex items-center gap-1 transition-all shadow-md cursor-pointer shrink-0",
                   todayLabel.bgClass,
                   todayLabel.textClass,
                   todayLabel.borderClass
@@ -151,19 +151,19 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
                 title="Ver colores de etiquetas semanales"
               >
                 <div className={cn("w-1.5 h-1.5 rounded-full border border-black/95 shadow-[0_0_2px_rgba(0,0,0,0.6)]", todayLabel.dotClass, "animate-pulse")} />
-                <span className="opacity-75">Hoy:</span>
+                <span className="opacity-75 hidden xs:inline">Hoy:</span>
                 <span>{todayLabel.colorName}</span>
               </button>
             </div>
 
             {/* Reloj visible en móviles */}
-            <div className="md:hidden shrink-0">
+            <div className="lg:hidden shrink-0">
               <Clock />
             </div>
           </div>
 
           {/* Fila Inferior (Mobile) / Fila Derecha (Desktop): Botones de control y Navegación */}
-          <div className="flex items-center justify-between md:justify-end gap-2.5 w-full md:w-auto border-t border-black/5 dark:border-white/5 pt-1.5 md:border-t-0 md:pt-0">
+          <div className="flex items-center justify-between lg:justify-end gap-2.5 w-full lg:w-auto border-t border-black/5 dark:border-white/5 pt-1.5 lg:border-t-0 lg:pt-0">
             <div className="flex items-center gap-1.5 flex-wrap">
               {/* Navegación limpia y espaciosa */}
               {activeLineCode !== "ALL" && (
@@ -255,7 +255,7 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
               {/* Cerrar Sesión */}
               <button
                 onClick={logout}
-                className="h-8 w-8 border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 backdrop-blur-sm text-red-400 rounded-lg cursor-pointer transition-all active:scale-95 flex items-center justify-center shrink-0"
+                className="hidden sm:flex h-8 w-8 border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 backdrop-blur-sm text-red-400 rounded-lg cursor-pointer transition-all active:scale-95 items-center justify-center shrink-0"
                 title="Cerrar sesión"
                 type="button"
               >
@@ -263,33 +263,35 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
               </button>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 bg-black/10 dark:bg-white/5 rounded-xl px-2 py-1 shadow-inner">
               {currentQueueIndex > 0 && (
                 <button
                   type="button"
                   onClick={() => jumpToQueueItem(currentQueueIndex - 1)}
-                  className="h-8 px-2 border border-white/10 bg-white/5 hover:bg-white/10 hover:text-emerald-400 text-white rounded-lg cursor-pointer transition-all active:scale-95 flex items-center justify-center gap-1 text-[10px] font-bold shrink-0"
-                  title="Volver al formato anterior"
+                  className="h-7 px-2 bg-white hover:bg-slate-50 text-slate-800 dark:bg-white/10 dark:hover:bg-white/20 dark:text-white rounded cursor-pointer transition-all active:scale-95 flex items-center justify-center text-[10px] font-bold shadow-sm"
+                  title="Ver formato anterior (No finaliza el actual)"
                 >
-                  Ant.
+                  ◀
                 </button>
               )}
+              
+              <span className={cn("text-xs font-black px-2 shrink-0", goldMode ? "text-amber-400" : "text-emerald-700 dark:text-emerald-400")}>
+                {currentQueueIndex + 1}/{queue.length}
+              </span>
+
               {currentQueueIndex < queue.length - 1 && (
                 <button
                   type="button"
                   onClick={() => jumpToQueueItem(currentQueueIndex + 1)}
-                  className="h-8 px-2 border border-white/10 bg-white/5 hover:bg-white/10 hover:text-emerald-400 text-white rounded-lg cursor-pointer transition-all active:scale-95 flex items-center justify-center gap-1 text-[10px] font-bold shrink-0"
-                  title="Avanzar al siguiente formato"
+                  className="h-7 px-2 bg-white hover:bg-slate-50 text-slate-800 dark:bg-white/10 dark:hover:bg-white/20 dark:text-white rounded cursor-pointer transition-all active:scale-95 flex items-center justify-center gap-1 text-[10px] font-bold shadow-sm"
+                  title="Ver formato siguiente (No finaliza el actual)"
                 >
-                  Sig.
+                  Ojo al Sig. ▶
                 </button>
               )}
-              <span className="text-[10px] text-white/35 font-mono bg-white/5 px-2 py-0.5 rounded-md shrink-0">
-                {currentQueueIndex + 1}/{queue.length}
-              </span>
               
               {/* Reloj visible en desktop */}
-              <div className="hidden md:block">
+              <div className="hidden lg:block ml-2">
                 <Clock />
               </div>
             </div>
@@ -301,37 +303,61 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
           const nextNobPallets = Math.floor(next.noblejas / next.boxesPerPallet);
           const nextNobPico = next.noblejas % next.boxesPerPallet;
           return (
-            <div className="mt-2 flex items-center gap-2 text-xs flex-wrap font-medium">
-              <span className="text-white/35 uppercase tracking-wider">SIGUIENTE:</span>
-              <span
-                className={cn(
-                  "font-bold flex items-center gap-1.5 flex-wrap",
-                  transition === "salad-change"
-                    ? "text-red-400"
-                    : transition === "box-change"
-                    ? "text-orange-400"
-                    : "text-emerald-400"
-                )}
-              >
-                {transition === "salad-change" && (
-                  <span>{next.saladName} |</span>
-                )}
-                <span>{next.boxType}</span>
-                <span className="text-white/70">· {next.quantity} cajas</span>
-                <span className="text-white/40 font-normal font-mono">
-                  ({calcNext.pallets}p + {calcNext.pico}c)
+            <div className={cn(
+              "mt-2.5 p-2 rounded-xl flex items-center justify-between text-xs flex-wrap font-medium shadow-inner border",
+              goldMode ? "bg-black/40 border-amber-500/20" : "bg-black/5 dark:bg-white/5 border-emerald-500/20"
+            )}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={cn(
+                  "px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest",
+                  goldMode ? "bg-amber-500/20 text-amber-400" : "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                )}>
+                  Próximo Formato
                 </span>
+                <span
+                  className={cn(
+                    "font-black text-sm flex items-center gap-1.5 flex-wrap",
+                    transition === "salad-change"
+                      ? "text-red-500 dark:text-red-400"
+                      : transition === "box-change"
+                      ? "text-orange-500 dark:text-orange-400"
+                      : goldMode ? "text-white" : "text-emerald-800 dark:text-emerald-400"
+                  )}
+                >
+                  {transition === "salad-change" && (
+                    <span>{next.saladName} |</span>
+                  )}
+                  <span>{next.boxType}</span>
+                </span>
+                <span className="text-foreground/70 font-bold ml-1">· {next.quantity} cajas totales</span>
+                <span className="text-foreground/50 font-normal font-mono bg-foreground/5 px-1.5 py-0.5 rounded">
+                  ({calcNext.pallets} pales + {calcNext.pico} cajas pico)
+                </span>
+                
                 {next.noblejas > 0 && (
-                  <span className="flex items-center gap-1 text-purple-400 font-bold bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-lg ml-1">
+                  <span className="flex items-center gap-1 text-purple-600 dark:text-purple-400 font-bold bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-lg ml-1">
                     Nob: {next.noblejas} cajas ({nextNobPallets}p + {nextNobPico}c)
                   </span>
                 )}
                 {goldMode && getActiveLote(queue, currentQueueIndex + 1) && (
-                  <span className="flex items-center gap-1 text-purple-400 font-bold bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-lg ml-1">
+                  <span className="flex items-center gap-1 text-purple-600 dark:text-purple-400 font-bold bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-lg ml-1">
                     Lote: {getActiveLote(queue, currentQueueIndex + 1)}
                   </span>
                 )}
-              </span>
+              </div>
+              
+              <button
+                onClick={() => jumpToQueueItem(currentQueueIndex + 1)}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer shadow-sm active:scale-95 ml-auto mt-2 sm:mt-0",
+                  goldMode 
+                    ? "bg-amber-500 text-black hover:bg-amber-400" 
+                    : "bg-emerald-600 text-white hover:bg-emerald-500"
+                )}
+                title="Ojo: esto solo echa un vistazo al formato, no finaliza el actual."
+              >
+                Echar un vistazo 👀
+              </button>
             </div>
           );
         })()}

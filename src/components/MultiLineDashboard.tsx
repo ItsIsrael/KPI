@@ -1156,21 +1156,43 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                   </div>
 
                   {/* Siguiente Orden en Cola si existe */}
-                  {item.nextItem && isDuoView && (
-                    <div className={cn(
-                      "border rounded-2xl p-3 flex items-center justify-between text-xs",
-                      goldMode ? "bg-white/[0.01] border-white/5" : "bg-emerald-50/40 border-emerald-600/15"
-                    )}>
-                      <div className="flex items-center gap-2">
-                        <span className={cn("text-[10px] font-black uppercase tracking-wider", goldMode ? "text-white/40" : "text-[#64748b]")}>
-                          A continuación:
-                        </span>
-                        <span className={cn("font-bold", goldMode ? "text-white/80" : "text-[#0f291e]")}>🥗 {item.nextItem.saladName}</span>
-                        <span className="opacity-40">· 📦 {item.nextItem.boxType}</span>
+                  {item.nextItem && (() => {
+                    const nextNobPallets = Math.floor(item.nextItem.noblejas / item.nextItem.boxesPerPallet);
+                    const nextNobPico = item.nextItem.noblejas % item.nextItem.boxesPerPallet;
+                    const totalPallets = Math.floor(item.nextItem.quantity / item.nextItem.boxesPerPallet);
+                    const picoBoxes = item.nextItem.quantity % item.nextItem.boxesPerPallet;
+                    return (
+                      <div className={cn(
+                        "border rounded-2xl p-3 flex flex-col gap-2 text-xs",
+                        goldMode ? "bg-white/[0.01] border-white/5" : "bg-emerald-50/40 border-emerald-600/15"
+                      )}>
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={cn("px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest", goldMode ? "bg-amber-500/20 text-amber-400" : "bg-emerald-600/20 text-emerald-700")}>
+                              A CONTINUACIÓN
+                            </span>
+                            <span className={cn("font-bold text-sm", goldMode ? "text-white" : "text-[#0f291e]")}>
+                              🥗 {item.nextItem.saladName}
+                            </span>
+                            <span className={cn("font-bold", goldMode ? "text-amber-400/80" : "text-emerald-700")}>· 📦 {item.nextItem.boxType}</span>
+                          </div>
+                          <span className="text-emerald-600 font-mono font-bold text-sm bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/20">
+                            {item.nextItem.quantity} cajas totales
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap mt-1">
+                          <span className="text-foreground/50 font-normal font-mono bg-foreground/5 px-2 py-0.5 rounded-md">
+                            ({totalPallets} pales + {picoBoxes} cajas pico)
+                          </span>
+                          {item.nextItem.noblejas > 0 && (
+                            <span className="flex items-center gap-1 text-purple-600 dark:text-purple-400 font-bold bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-lg">
+                              Nob: {item.nextItem.noblejas} ({nextNobPallets}p + {nextNobPico}c)
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <span className="text-emerald-600 font-mono font-bold">{item.nextItem.quantity} cajas</span>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               ) : (
                 /* Estado vacío con botón rápido de carga directa */
