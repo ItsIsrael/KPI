@@ -321,7 +321,7 @@ export async function syncProgress(queueItemId: string, progress: FormatProgress
       { onConflict: "queue_item_id" }
     );
     if (error) {
-      console.error("Supabase upsert error in syncProgress:", error.message, error.details, error.hint);
+      // Silently ignore or handle
     }
   } catch (e) {
     console.error("Critical error in syncProgress:", e);

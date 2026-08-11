@@ -491,13 +491,17 @@ export const useProductionStore = create<ProductionState>()(
               targetProgressMap[item.id] = createInitialProgress(item.id);
             }
           });
-          const firstItem = targetQueue[0];
-          const targetCurrentProgress = firstItem ? targetProgressMap[firstItem.id] || createInitialProgress(firstItem.id) : null;
+          const targetCurrentQueueIndex = prevTargetStorage.currentQueueIndex || 0;
+          const currentItemInTarget = targetQueue[targetCurrentQueueIndex] || targetQueue[0];
+          
+          const targetCurrentProgress = prevTargetStorage.currentProgress && currentItemInTarget && prevTargetStorage.currentProgress.queueItemId === currentItemInTarget.id 
+            ? prevTargetStorage.currentProgress 
+            : (currentItemInTarget ? targetProgressMap[currentItemInTarget.id] || createInitialProgress(currentItemInTarget.id) : null);
 
           const targetLineState = {
             salads: targetSalads,
             queue: targetQueue,
-            currentQueueIndex: 0,
+            currentQueueIndex: targetCurrentQueueIndex,
             currentProgress: targetCurrentProgress,
             queueProgress: targetProgressMap,
             isProducing: true,
@@ -512,9 +516,9 @@ export const useProductionStore = create<ProductionState>()(
 
           if (lineIdToUse) {
             await syncQueueItems(lineIdToUse, targetQueue);
-            await syncLineState(lineIdToUse, true, 0);
-            if (firstItem && targetCurrentProgress) {
-              await syncProgress(firstItem.id, targetCurrentProgress);
+            await syncLineState(lineIdToUse, true, targetCurrentQueueIndex);
+            if (currentItemInTarget && targetCurrentProgress) {
+              await syncProgress(currentItemInTarget.id, targetCurrentProgress);
             }
           }
           broadcastLocalChange(lineCodeToUse);
