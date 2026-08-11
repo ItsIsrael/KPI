@@ -233,6 +233,8 @@ function formatDuration(ms: number): string {
   return `${secs}s`;
 }
 
+let currentLoadRequestId = 0;
+
 export const useProductionStore = create<ProductionState>()(
   persist(
     (set, get) => ({
@@ -291,12 +293,18 @@ export const useProductionStore = create<ProductionState>()(
         const { activeLineCode, queue: currentLocalQueue, salads: currentLocalSalads } = get();
         if (activeLineCode === "ALL") return;
 
+        const requestId = ++currentLoadRequestId;
+
         try {
           const lines = await getProductionLines();
+          if (requestId !== currentLoadRequestId) return;
+          
           const currentLine = lines.find((l) => l.code === activeLineCode);
           if (currentLine) {
             set({ activeLineId: currentLine.id });
             const data = await fetchLineData(currentLine.id);
+            if (requestId !== currentLoadRequestId) return;
+            
             if (data.queue && data.queue.length > 0) {
               const currentQueueItem = data.queue[data.currentQueueIndex];
               const prog = currentQueueItem

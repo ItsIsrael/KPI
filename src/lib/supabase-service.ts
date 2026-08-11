@@ -269,8 +269,10 @@ export async function syncQueueItems(lineId: string, queue: QueueItem[]) {
 
       if (orphanItems && orphanItems.length > 0) {
         const orphanIds = orphanItems.map((o) => o.id);
-        await supabase.from("queue_item_progress").delete().in("queue_item_id", orphanIds);
-        await supabase.from("line_queue_items").delete().in("id", orphanIds);
+        const { error: err1 } = await supabase.from("queue_item_progress").delete().in("queue_item_id", orphanIds);
+        if (err1) console.error("Error deleting queue_item_progress (orphan):", err1);
+        const { error: err2 } = await supabase.from("line_queue_items").delete().in("id", orphanIds);
+        if (err2) console.error("Error deleting line_queue_items (orphan):", err2);
       }
     } else {
       const { data: allLineItems } = await supabase
@@ -280,8 +282,10 @@ export async function syncQueueItems(lineId: string, queue: QueueItem[]) {
 
       if (allLineItems && allLineItems.length > 0) {
         const allIds = allLineItems.map((o) => o.id);
-        await supabase.from("queue_item_progress").delete().in("queue_item_id", allIds);
-        await supabase.from("line_queue_items").delete().in("id", allIds);
+        const { error: err1 } = await supabase.from("queue_item_progress").delete().in("queue_item_id", allIds);
+        if (err1) console.error("Error deleting queue_item_progress (all):", err1);
+        const { error: err2 } = await supabase.from("line_queue_items").delete().in("id", allIds);
+        if (err2) console.error("Error deleting line_queue_items (all):", err2);
       }
     }
   } catch (e) {

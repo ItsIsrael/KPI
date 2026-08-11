@@ -44,6 +44,8 @@ const QUICK_SALADS = [
   "Wraps",
 ];
 
+let currentDashboardRequestId = 0;
+
 export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboardProps) {
   const [overview, setOverview] = useState<LineOverview[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,8 +64,11 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
   const [modalLote, setModalLote] = useState<string>("");
 
   const fetchOverview = async () => {
+    const requestId = ++currentDashboardRequestId;
     try {
       const data = await getFactoryOverview();
+      if (requestId !== currentDashboardRequestId) return;
+      
       const localStore = useProductionStore.getState();
 
       const merged = data.map((o) => {
