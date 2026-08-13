@@ -257,7 +257,7 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
           </div>
 
           <div className="flex flex-wrap gap-1.5">
-            {COMMON_SALADS.map((name) => {
+            {DEFAULT_SALADS.map((name) => {
               const isSelected = saladName.toLowerCase() === name.toLowerCase();
               return (
                 <button
