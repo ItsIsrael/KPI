@@ -2,22 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useProductionStore } from "@/store/production-store";
-import { DEFAULT_BOX_TYPES, DEFAULT_PRODUCTION_LINES, generateId, calculateFormat, getSaladsPerBox } from "@/types/types";
+import { DEFAULT_BOX_TYPES, DEFAULT_PRODUCTION_LINES, generateId, calculateFormat, getSaladsPerBox, DEFAULT_SALADS } from "@/types/types";
 import type { Salad } from "@/types/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Plus, Package, Check, AlertCircle, Sparkles, Layers } from "lucide-react";
 
-const COMMON_SALADS = [
-  "César",
-  "César American",
-  "Pasta y Rúcula",
-  "Gourmet",
-  "Pasta y Atún",
-  "Japón",
-  "Digestiva",
-  "Wraps",
-];
+
 
 interface QuickQueueBuilderProps {
   goldMode?: boolean;

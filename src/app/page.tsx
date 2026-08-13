@@ -290,9 +290,16 @@ export default function Home() {
 
   // ===== MODO PRODUCCIÓN =====
   const renderProductionContent = () => (
-    <div className="flex-1 flex flex-col h-screen overflow-hidden">
+    <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
+      {/* Enorme marca de agua en el fondo para indicar la línea activa */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 overflow-hidden opacity-[0.03] dark:opacity-[0.02]">
+         <span className="text-[40vw] font-black tracking-tighter whitespace-nowrap select-none">
+           {activeLineCode}
+         </span>
+      </div>
+
       <ProductionHeader onOpenLabelsModal={() => setShowLabelsModal(true)} />
-      <div className="flex-1 max-w-2xl mx-auto w-full px-3 py-2 space-y-2 overflow-y-auto">
+      <div className="flex-1 max-w-2xl mx-auto w-full px-3 py-2 space-y-2 overflow-y-auto relative z-10">
 
         <ProductionCard />
         <ProductionControls />
@@ -337,7 +344,14 @@ export default function Home() {
 
   // ===== MODO PREPARACIÓN =====
   const renderPreparationContent = () => (
-    <div className="flex-1 flex flex-col min-h-screen overflow-y-auto">
+    <div className="flex-1 flex flex-col min-h-screen overflow-y-auto relative">
+      {/* Enorme marca de agua en el fondo para indicar la línea activa */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0 overflow-hidden opacity-[0.03] dark:opacity-[0.02]">
+         <span className="text-[40vw] font-black tracking-tighter whitespace-nowrap select-none">
+           {activeLineCode}
+         </span>
+      </div>
+
       {/* Header */}
       <header className="sticky top-0 z-40 bg-black/20 backdrop-blur-xl border-b border-white/10">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -391,16 +405,15 @@ export default function Home() {
             </button>
           </div>
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-            {/* Navegación limpia y espaciosa: Dashboard y Línea Activa */}
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0 relative z-10">
               {activeLineCode !== "ALL" && (
                 <div className={cn(
-                  "px-3 py-1.5 rounded-xl text-xs font-black border shadow-sm flex items-center gap-1.5",
+                  "px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black border-2 shadow-md flex items-center gap-1.5 uppercase tracking-widest",
                   goldMode
-                    ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                    : "bg-emerald-600 text-white border-emerald-500"
+                    ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
+                    : "bg-emerald-600 text-white border-emerald-400"
                 )}>
-                  <span>📍</span>
+                  <span className="text-sm">📍</span>
                   <span>Línea {activeLineCode}</span>
                 </div>
               )}

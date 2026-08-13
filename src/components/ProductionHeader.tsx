@@ -168,12 +168,12 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
               {/* Navegación limpia y espaciosa */}
               {activeLineCode !== "ALL" && (
                 <div className={cn(
-                  "px-2.5 py-1 rounded-lg text-xs font-black border shadow-sm flex items-center gap-1",
+                  "px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black border-2 shadow-md flex items-center gap-1.5 uppercase tracking-widest",
                   goldMode
-                    ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                    : "bg-emerald-600 text-white border-emerald-500"
+                    ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
+                    : "bg-emerald-600 text-white border-emerald-400"
                 )}>
-                  <span>📍</span>
+                  <span className="text-sm">📍</span>
                   <span>Línea {activeLineCode}</span>
                 </div>
               )}

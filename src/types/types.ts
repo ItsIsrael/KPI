@@ -16,6 +16,19 @@ export const DEFAULT_BOX_TYPES: BoxTypeOption[] = [
 
 ];
 
+// ===== ENSALADAS PREDEFINIDAS =====
+
+export const DEFAULT_SALADS: string[] = [
+  "César",
+  "César American",
+  "Pasta y Rúcula",
+  "Gourmet",
+  "Pasta y Atún",
+  "Japón",
+  "Digestiva",
+  "Wraps",
+];
+
 // ===== FORMATO DE PRODUCCIÓN =====
 
 export interface Format {

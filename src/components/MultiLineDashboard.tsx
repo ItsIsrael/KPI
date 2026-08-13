@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { LineOverview, FormatProgress, Salad, QueueItem, HistoryItem } from "@/types/types";
-import { calculateFormat, DEFAULT_BOX_TYPES, generateId } from "@/types/types";
+import { calculateFormat, DEFAULT_BOX_TYPES, generateId, DEFAULT_SALADS } from "@/types/types";
 import { getFactoryOverview, syncProgress, syncLineState, syncQueueItems, saveHistoryLog, subscribeToGlobalChanges } from "@/lib/supabase-service";
 import { testSupabaseConnection, type SupabaseTestResult } from "@/lib/supabase-test";
 import { useProductionStore } from "@/store/production-store";
@@ -33,16 +33,7 @@ interface MultiLineDashboardProps {
 
 type ViewMode = "ALL" | "PAIR_01" | "PAIR_23" | "CUSTOM";
 
-const QUICK_SALADS = [
-  "César",
-  "César American",
-  "Pasta y Rúcula",
-  "Gourmet",
-  "Pasta y Atún",
-  "Japón",
-  "Digestiva",
-  "Wraps",
-];
+
 
 let currentDashboardRequestId = 0;
 
