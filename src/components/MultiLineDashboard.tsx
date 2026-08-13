@@ -1304,7 +1304,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                 Selecciona Ensalada:
               </label>
               <div className="grid grid-cols-2 gap-1.5">
-                {QUICK_SALADS.map((name) => (
+                {DEFAULT_SALADS.map((name) => (
                   <button
                     key={name}
                     type="button"
