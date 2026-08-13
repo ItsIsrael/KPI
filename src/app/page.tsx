@@ -1,5 +1,7 @@
 "use client";
 
+import packageJson from "../../package.json";
+
 import { useState, useEffect, useRef } from "react";
 import { useProductionStore } from "@/store/production-store";
 import { calculateFormat, DAY_LABEL_COLORS, getTodayLabelColor, getSaladsPerBox, getActiveLote, getTransitionType } from "@/types/types";
@@ -554,34 +556,43 @@ export default function Home() {
       </div>
 
       {/* Footer */}
-      <footer className="border-t border-white/5 py-4 px-4 flex justify-between items-center text-xs text-white/20">
-        <button
-          onClick={() => {
-            const pwd = window.prompt("Introduce la contraseña de administrador para forzar el borrado de la base de datos de esta línea:");
-            if (pwd === "piloto") {
-              if (window.confirm("⚠️ ADVERTENCIA: Esto borrará por completo la base de datos de esta línea. ¿Estás seguro?")) {
-                hardResetDatabase();
+      <footer className="border-t border-white/5 py-4 px-4 flex items-center justify-between text-xs text-white/20 relative">
+        <div className="flex-1">
+          <button
+            onClick={() => {
+              const pwd = window.prompt("Introduce la contraseña de administrador para forzar el borrado de la base de datos de esta línea:");
+              if (pwd === "piloto") {
+                if (window.confirm("⚠️ ADVERTENCIA: Esto borrará por completo la base de datos de esta línea. ¿Estás seguro?")) {
+                  hardResetDatabase();
+                }
+              } else if (pwd !== null) {
+                alert("Contraseña incorrecta.");
               }
-            } else if (pwd !== null) {
-              alert("Contraseña incorrecta.");
-            }
-          }}
-          className="px-3 py-1.5 rounded-lg border border-red-500/20 bg-red-500/5 text-red-500/50 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 transition-all cursor-pointer font-semibold shadow-sm"
-          title="Forzar borrado de la base de datos (Requiere contraseña)"
-        >
-          Borrado Forzado DB
-        </button>
-        <p>
-          Desarrollado por{" "}
-          <a
-            href="https://isra.dev"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-emerald-400/50 hover:text-emerald-400 transition-colors font-semibold"
+            }}
+            className="px-3 py-1.5 rounded-lg border border-red-500/20 bg-red-500/5 text-red-500/50 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 transition-all cursor-pointer font-semibold shadow-sm"
+            title="Forzar borrado de la base de datos (Requiere contraseña)"
           >
-            isra.dev
-          </a>
-        </p>
+            Borrado Forzado DB
+          </button>
+        </div>
+        <div className="flex-1 flex justify-center">
+          <p>
+            Desarrollado por{" "}
+            <a
+              href="https://isra.dev"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-emerald-400/50 hover:text-emerald-400 transition-colors font-semibold"
+            >
+              isra.dev
+            </a>
+          </p>
+        </div>
+        <div className="flex-1 flex justify-end">
+          <span className="font-mono font-bold opacity-50 hover:opacity-100 transition-opacity tracking-wider cursor-default" title="Versión actual">
+            v{packageJson.version}
+          </span>
+        </div>
       </footer>
     </div>
   );
