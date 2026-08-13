@@ -253,9 +253,11 @@ export async function syncQueueItems(lineId: string, queue: QueueItem[]) {
         fecha_caducidad: item.fechaCaducidad || null,
       }));
 
-      const { error } = await supabase.from("line_queue_items").upsert(rows, { onConflict: "id" });
+      const { data, error } = await supabase.from("line_queue_items").upsert(rows, { onConflict: "id" }).select();
       if (error) {
         console.error("Supabase upsert error in syncQueueItems:", error.message, error.details, error.hint);
+      } else {
+        console.log("Supabase upsert SUCCESS in syncQueueItems. Rows returned:", data?.length);
       }
     }
 

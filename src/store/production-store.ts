@@ -472,6 +472,7 @@ export const useProductionStore = create<ProductionState>()(
           }));
 
           // Sincronización completa con Supabase
+          console.log(`[addSalad] Calling syncQueueItems with lineIdToUse=${lineIdToUse}, updatedQueue length=${updatedQueue.length}`);
           if (lineIdToUse) {
             await syncQueueItems(lineIdToUse, updatedQueue);
             await syncLineState(lineIdToUse, true, currentQueueIndex);
