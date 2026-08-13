@@ -16,7 +16,7 @@ import { ProductionQueue } from "@/components/ProductionQueue";
 import { EditQueueItemDialog } from "@/components/EditQueueItemDialog";
 import { TransitionBanner } from "@/components/TransitionBanner";
 import { cn } from "@/lib/utils";
-import { Calculator as CalcIcon, Maximize, Minimize, Trash2, Play, History, LogOut } from "lucide-react";
+import { Calculator as CalcIcon, Maximize, Minimize, Trash2, Play, History, LogOut, LayoutDashboard } from "lucide-react";
 import { LoginScreen } from "@/components/LoginScreen";
 import { ScreenLockOverlay } from "@/components/ScreenLockOverlay";
 import { MultiLineDashboard } from "@/components/MultiLineDashboard";
@@ -412,13 +412,13 @@ export default function Home() {
                       ? "bg-amber-500 text-black border-amber-400"
                       : "bg-emerald-600 text-white border-emerald-700"
                     : goldMode
-                    ? "bg-white/5 border-white/10 text-white/70 hover:text-white hover:bg-white/10"
-                    : "bg-white border-slate-300 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800"
+                    ? "bg-white/5 border-white/10 text-white/70 hover:text-white hover:bg-white/10 hover:scale-105 active:scale-95"
+                    : "bg-white border-slate-300 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 hover:scale-105 active:scale-95"
                 )}
                 title="Ver Monitor Multilínea (Dashboard)"
                 type="button"
               >
-                <span>🏢</span>
+                <LayoutDashboard className="w-4 h-4" />
                 <span>Dashboard</span>
               </button>
             </div>

@@ -4,7 +4,7 @@ import { useProductionStore } from "@/store/production-store";
 import { getTransitionType, calculateFormat, getTodayLabelColor, getActiveLote } from "@/types/types";
 import type { QueueItem } from "@/types/types";
 import { Clock } from "./Clock";
-import { Calculator, Sun, Moon, Maximize, Minimize, Globe, Tv, LogOut, Lock } from "lucide-react";
+import { Calculator, Sun, Moon, Maximize, Minimize, Globe, Tv, LogOut, Lock, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 
@@ -181,19 +181,19 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
               <button
                 onClick={() => setActiveLineCode("ALL")}
                 className={cn(
-                  "px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1 shadow-sm border",
+                  "px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shadow-sm border",
                   activeLineCode === "ALL"
                     ? goldMode
                       ? "bg-amber-500 text-black border-amber-400"
                       : "bg-emerald-600 text-white border-emerald-700"
                     : goldMode
-                    ? "bg-white/5 border-white/10 text-white/70 hover:text-white hover:bg-white/10"
-                    : "bg-white border-slate-300 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800"
+                    ? "bg-white/5 border-white/10 text-white/70 hover:text-white hover:bg-white/10 hover:scale-105 active:scale-95"
+                    : "bg-white border-slate-300 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 hover:scale-105 active:scale-95"
                 )}
                 title="Ver Monitor Multilínea (Dashboard)"
                 type="button"
               >
-                <span>🏢</span>
+                <LayoutDashboard className="w-4 h-4" />
                 <span>Dashboard</span>
               </button>
 

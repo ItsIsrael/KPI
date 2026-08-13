@@ -77,6 +77,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
   const [connectionTest, setConnectionTest] = useState<SupabaseTestResult | null>(null);
   const [isTestingConn, setIsTestingConn] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [feedbackMsg, setFeedbackMsg] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
 
   // Modal para Cargar Ensalada Rápida directamente desde el Dashboard
   const [quickAddLineCode, setQuickAddLineCode] = useState<string | null>(null);
@@ -495,6 +496,9 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
 
     setQuickAddLineCode(null);
     fetchOverview();
+    
+    setFeedbackMsg({ text: `¡Ensalada añadida con éxito en ${quickAddLineCode}!`, type: 'success' });
+    setTimeout(() => setFeedbackMsg(null), 3000);
   };
 
   const totalBoxesPlant = overview.reduce((acc, o) => acc + o.totalBoxes, 0);
@@ -879,6 +883,9 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                           <span>{item.currentSaladName}</span>
                         </h4>
                         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                          <span className="text-[10px] font-bold text-white/40 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 select-none shrink-0 uppercase tracking-widest">
+                            🏁 Fin de Cola
+                          </span>
                           <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
                             <span>📦</span>
                             <span>{item.currentBoxType}</span>
@@ -1414,6 +1421,19 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
               <Sparkles className="w-4 h-4" />
               <span>INICIAR PRODUCCIÓN EN {quickAddLineCode}</span>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Feedback */}
+      {feedbackMsg && (
+        <div className="fixed bottom-6 right-6 z-50 animate-slide-up">
+          <div className={cn(
+            "px-4 py-3 rounded-xl shadow-2xl border flex items-center gap-3 text-sm font-bold",
+            feedbackMsg.type === 'success' ? "bg-emerald-600 border-emerald-500 text-white" : "bg-red-600 border-red-500 text-white"
+          )}>
+            <span>{feedbackMsg.type === 'success' ? '✅' : '❌'}</span>
+            <span>{feedbackMsg.text}</span>
           </div>
         </div>
       )}
