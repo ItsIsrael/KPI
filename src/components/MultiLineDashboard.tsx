@@ -49,8 +49,31 @@ let currentDashboardRequestId = 0;
 export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboardProps) {
   const [overview, setOverview] = useState<LineOverview[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<ViewMode>("ALL");
-  const [customSelectedLines, setCustomSelectedLines] = useState<string[]>(["K00", "K01"]);
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("dashboardViewMode") as ViewMode) || "ALL";
+    }
+    return "ALL";
+  });
+  const [customSelectedLines, setCustomSelectedLines] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("dashboardCustomLines");
+      if (saved) return JSON.parse(saved);
+    }
+    return ["K00", "K01"];
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("dashboardViewMode", viewMode);
+    }
+  }, [viewMode]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("dashboardCustomLines", JSON.stringify(customSelectedLines));
+    }
+  }, [customSelectedLines]);
   const [connectionTest, setConnectionTest] = useState<SupabaseTestResult | null>(null);
   const [isTestingConn, setIsTestingConn] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);

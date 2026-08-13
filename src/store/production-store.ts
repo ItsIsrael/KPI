@@ -294,6 +294,10 @@ export const useProductionStore = create<ProductionState>()(
       loadActiveLineData: async () => {
         const { activeLineCode, queue: currentLocalQueue, salads: currentLocalSalads } = get();
         if (activeLineCode === "ALL") return;
+        
+        // Si no hay Supabase, no intentes cargar datos (y así no borras el estado local)
+        const { isSupabaseConfigured } = await import("@/lib/supabase");
+        if (!isSupabaseConfigured) return;
 
         const requestId = ++currentLoadRequestId;
 
