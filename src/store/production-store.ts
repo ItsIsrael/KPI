@@ -543,64 +543,89 @@ export const useProductionStore = create<ProductionState>()(
           queue: state.queue.filter((q) => q.saladId !== id),
         })),
 
-      updateSalad: (id, updates) =>
-        set((state) => {
-          const updatedSalads = state.salads.map((s) =>
-            s.id === id ? { ...s, ...updates } : s
+      updateSalad: async (id, updates) => {
+        const state = get();
+        const updatedSalads = state.salads.map((s) =>
+          s.id === id ? { ...s, ...updates } : s
+        );
+
+        const targetSalad = updatedSalads.find((s) => s.id === id);
+        if (!targetSalad) return;
+
+        let newQueue = [...state.queue];
+
+        // 1. Remove queue items whose format was deleted from the salad
+        const saladFormatIds = new Set(targetSalad.formats.map((f) => f.id));
+        newQueue = newQueue.filter((q) => q.saladId !== id || saladFormatIds.has(q.formatId));
+
+        // 2. Update existing formats in the queue or append new formats added to the salad
+        targetSalad.formats.forEach((format) => {
+          const existingIndex = newQueue.findIndex(
+            (q) => q.saladId === id && q.formatId === format.id
           );
+          if (existingIndex > -1) {
+            newQueue[existingIndex] = {
+              ...newQueue[existingIndex],
+              saladName: targetSalad.name,
+              boxType: format.boxType,
+              quantity: format.quantity,
+              noblejas: format.noblejas,
+              boxesPerPallet: format.boxesPerPallet,
+              note: format.note,
+              lote: format.lote,
+              cambioLote: format.cambioLote,
+              fechaCaducidad: format.fechaCaducidad,
+              linea: format.linea || state.activeLineCode,
+            };
+          } else {
+            newQueue.push({
+              id: generateId(),
+              saladId: targetSalad.id,
+              saladName: targetSalad.name,
+              formatId: format.id,
+              boxType: format.boxType,
+              quantity: format.quantity,
+              noblejas: format.noblejas,
+              boxesPerPallet: format.boxesPerPallet,
+              note: format.note,
+              lote: format.lote,
+              cambioLote: format.cambioLote,
+              fechaCaducidad: format.fechaCaducidad,
+              linea: format.linea || state.activeLineCode,
+            });
+          }
+        });
 
-          const targetSalad = updatedSalads.find((s) => s.id === id);
-          if (!targetSalad) return { salads: updatedSalads };
+        // Initialize progress for new items
+        const updatedQueueProgress: Record<string, FormatProgress> = { ...(state.queueProgress || {}) };
+        newQueue.forEach((item) => {
+          if (!updatedQueueProgress[item.id]) {
+            updatedQueueProgress[item.id] = createInitialProgress(item.id);
+          }
+        });
 
-          let newQueue = [...state.queue];
+        const lineState = {
+          salads: updatedSalads,
+          queue: newQueue,
+          queueProgress: updatedQueueProgress,
+        };
 
-          // 1. Remove queue items whose format was deleted from the salad
-          const saladFormatIds = new Set(targetSalad.formats.map((f) => f.id));
-          newQueue = newQueue.filter((q) => q.saladId !== id || saladFormatIds.has(q.formatId));
+        set((s) => ({
+          ...lineState,
+          lineStorage: {
+            ...s.lineStorage,
+            [state.activeLineCode]: {
+              ...s.lineStorage[state.activeLineCode],
+              ...lineState,
+            },
+          },
+        }));
 
-          // 2. Update existing formats in the queue or append new formats added to the salad
-          targetSalad.formats.forEach((format) => {
-            const existingIndex = newQueue.findIndex(
-              (q) => q.saladId === id && q.formatId === format.id
-            );
-            if (existingIndex > -1) {
-              newQueue[existingIndex] = {
-                ...newQueue[existingIndex],
-                saladName: targetSalad.name,
-                boxType: format.boxType,
-                quantity: format.quantity,
-                noblejas: format.noblejas,
-                boxesPerPallet: format.boxesPerPallet,
-                note: format.note,
-                lote: format.lote,
-                cambioLote: format.cambioLote,
-                fechaCaducidad: format.fechaCaducidad,
-                linea: format.linea,
-              };
-            } else {
-              newQueue.push({
-                id: generateId(),
-                saladId: targetSalad.id,
-                saladName: targetSalad.name,
-                formatId: format.id,
-                boxType: format.boxType,
-                quantity: format.quantity,
-                noblejas: format.noblejas,
-                boxesPerPallet: format.boxesPerPallet,
-                note: format.note,
-                lote: format.lote,
-                cambioLote: format.cambioLote,
-                fechaCaducidad: format.fechaCaducidad,
-                linea: format.linea,
-              });
-            }
-          });
-
-          return {
-            salads: updatedSalads,
-            queue: newQueue,
-          };
-        }),
+        if (state.activeLineId) {
+          await syncQueueItems(state.activeLineId, newQueue);
+        }
+        broadcastLocalChange(state.activeLineCode);
+      },
 
       // ===== COLA =====
 

@@ -214,26 +214,28 @@ export function SaladForm({ editingSalad, formMode = "standard", currentSaladInf
       return;
     }
 
-    if (formMode === "add-format" || formMode === "add-salad") {
-      const saladId = formMode === "add-format" ? (currentSaladInfo?.id ?? generateId()) : generateId();
-      const saladName = name.trim().toUpperCase();
-
-      const newQueueItems = parsedFormats.map((f) => ({
+    if (formMode === "add-format" && currentSaladInfo) {
+      const state = useProductionStore.getState();
+      const existingSalad = state.salads.find(s => s.id === currentSaladInfo.id);
+      if (existingSalad) {
+        updateSalad(existingSalad.id, {
+          formats: [...existingSalad.formats, ...parsedFormats]
+        });
+      } else {
+        const salad: Salad = {
+          id: currentSaladInfo.id,
+          name: name.trim().toUpperCase(),
+          formats: parsedFormats,
+        };
+        addSalad(salad);
+      }
+    } else if (formMode === "add-salad") {
+      const salad: Salad = {
         id: generateId(),
-        saladId,
-        saladName,
-        formatId: f.id,
-        boxType: f.boxType,
-        quantity: f.quantity,
-        noblejas: f.noblejas,
-        boxesPerPallet: f.boxesPerPallet,
-        lote: f.lote,
-        cambioLote: f.cambioLote,
-      }));
-
-      useProductionStore.setState((state) => ({
-        queue: [...state.queue, ...newQueueItems],
-      }));
+        name: name.trim().toUpperCase(),
+        formats: parsedFormats,
+      };
+      addSalad(salad);
     } else if (editingSalad) {
       updateSalad(editingSalad.id, {
         name: name.trim().toUpperCase(),

@@ -26,7 +26,8 @@ export const DEFAULT_SALADS: string[] = [
   "Pasta y Atún",
   "Japón",
   "Digestiva",
-  "Wraps",  
+  "Wraps",
+  "Mixta"
 ];
 
 // ===== FORMATO DE PRODUCCIÓN =====
