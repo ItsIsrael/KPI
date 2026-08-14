@@ -1,0 +1,35 @@
+﻿fcbfc4d fix: make loading screen white in florette mode
+11c9342 feat: smooth button transitions and enhanced dashboard connection status
+e75d342 feat: improve responsiveness of header and enhance next format previews
+0db4e32 fix: remove dangerous fallback logic that resurrected deleted formats in race conditions
+f5f6899 feat: add hard reset database button with pilot password
+7ecb1ae fix: resolve race condition in websocket fetches causing deleted formats to reappear
+8c54f0b fix: optimistic UI and dashboard progress reset bug
+162e81f fix: restore original timestamp formats for Supabase columns
+3eaebe7 fix: Supabase date/time field out of range error
+cc0f6db fix: syntax error in QuickQueueBuilder
+1ba3a88 fix: default box type and remove box text
+84cf893 fix: bigint error and ui tweaks
+255a603 fix: updateQueueItem async sync and Supabase timestamp parsing
+06ce94d fix: updated_at bug in lines sync and dashboard UI improvements
+f461bb0 feat: UI improvements and websocket optimizations
+922ea7e feat: cap noblejas to total order boxes, clean preparation view, and add full header (clock, label, calc, theme) to dashboard view
+9160721 fix(supabase): embed default Supabase credentials as fallback so cloud deploys never show local mode
+cc4da86 fix(ui): high-contrast readable colors for both white (Florette) and dark (Gold) themes and declutter header with clean Dashboard button
+ab23432 feat: change app branding to L.I.A, dynamic formato/formatos label, and lia-kpi service name for Render
+89b56be ci: add render.yaml blueprint with short name liar-kpi and Supabase env vars
+8a2fce7 fix(supabase): protect foreign key constraints on queue_item_progress and cascade orphan progress deletes
+77c2167 feat: reactive status badge, 1-click finalize/clean line, direct quick-add modal from dashboard, and pallet cadence reminder
+9d47af4 feat: dynamic pico button in dashboard, visual pico matrix cells, 4-line default view, and rename tab to Dashboard
+92d48d4 feat: update quick salad selector with exact production list: C├®sar, C├®sar American, Pasta y R├║cula, Gourmet, Pasta y At├║n, Jap├│n, Digestiva, Wraps
+32970e8 feat: automatically remove finished salads and clean line queue upon completion so lines stay clean and ready
+508fb5e feat: show FINALIZADO badge on 100%, hide noblejas button when 0 noblejas, and ensure persistent pallet incrementing from dashboard
+8aed74a feat: complete box icons in pallet grids, dynamic line indicators and full emoji integration
+aa61f96 feat: restore classic friendly Florette emojis across all production cards, headers, queues and dashboards
+1e4697d fix: resolve race condition in loadActiveLineData and make addSalad submission synchronous and bulletproof
+2f45da3 fix: generate standard UUIDs, robust upsert in syncQueueItems, auto-start production on salad creation
+b74bb7e fix: resolve theme contrast in MultiLineDashboard for Florette light and Gold modes
+c32c360 feat: complete line isolation per lineStorage, rename to Linea K00-K03, add line selector to quick builder and pallet+boxes input for noblejas
+b77ec6e feat: enhance quick format with direct noblejas, rich duo line dashboard and multi-tab local realtime sync
+50b9630 feat: add pair view filters to dashboard, quick queue builder, connection test and remove all emojis
+430683b feat: migrate to multiline architecture with Supabase Realtime support

@@ -23,8 +23,10 @@ import {
   Sparkles,
   Bell,
   Trash2,
-  X
+  X,
+  Camera
 } from "lucide-react";
+import { OcrScanner } from "@/components/OcrScanner";
 
 interface MultiLineDashboardProps {
   onSelectLine: (lineCode: string) => void;
@@ -72,6 +74,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
 
   // Modal para Cargar Ensalada Rápida directamente desde el Dashboard
   const [quickAddLineCode, setQuickAddLineCode] = useState<string | null>(null);
+  const [isOcrScannerOpen, setOcrScannerOpen] = useState(false);
   const [modalSaladName, setModalSaladName] = useState<string>("César");
   const [modalBoxType, setModalBoxType] = useState<string>("Cartón 4");
   const [modalBoxes, setModalBoxes] = useState<string>("");
@@ -807,6 +810,21 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
 
                 {/* Badge Reactivo Automático (Sin doble punto y sin acción manual forzada) */}
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setQuickAddLineCode(item.line.code);
+                      setOcrScannerOpen(true);
+                    }}
+                    className={cn(
+                      "h-8 px-2.5 rounded-xl flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-sm border group",
+                      goldMode ? "border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400" : "border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700"
+                    )}
+                    title="Carga Inteligente con Cámara (OCR)"
+                    type="button"
+                  >
+                    <Camera className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                  </button>
                   <div
                     className={cn(
                       "h-8 px-3 rounded-xl border text-[11px] font-black uppercase tracking-wider flex items-center gap-2 shadow-sm select-none",
@@ -1414,6 +1432,16 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
             </button>
           </div>
         </div>
+      )}
+
+      {isOcrScannerOpen && quickAddLineCode && (
+        <OcrScanner
+          targetLineCode={quickAddLineCode}
+          onClose={() => {
+            setOcrScannerOpen(false);
+            setQuickAddLineCode(null);
+          }}
+        />
       )}
 
       {/* Toast Feedback */}
