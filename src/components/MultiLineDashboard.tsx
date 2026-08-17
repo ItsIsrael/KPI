@@ -43,7 +43,9 @@ import {
   ListChecks,
   Database,
   FileSpreadsheet,
-  Settings
+  Settings,
+  SkipForward,
+  Minus
 } from "lucide-react";
 import { ManualOrderScanner } from "@/components/ManualOrderScanner";
 import { ExcelUploader } from "@/components/ExcelUploader";
@@ -94,6 +96,8 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
   const [clearLineTarget, setClearLineTarget] = useState<string | null>(null);
   // AI anomaly alerts: { [lineCode]: { message, level, firedAt } }
   const [aiAlerts, setAiAlerts] = useState<Record<string, { message: string; level: "warning" | "critical"; firedAt: number }>>({});
+  // Live production estimate: interpolated boxes since last pallet
+  const [liveEstimates, setLiveEstimates] = useState<Record<string, number>>({});
   const [collapsedQueues, setCollapsedQueues] = useState<Record<string, boolean>>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("dashboardCollapsedQueues");
@@ -158,10 +162,11 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
 
             const totalBoxes = currentItem.quantity;
             const noblejasBoxes = currentItem.noblejas;
-            const totalPallets = calc.pallets;
-            const completedPallets = prog.completedPallets;
+            const maxNobPallets = noblejasBoxes > 0 ? Math.floor(noblejasBoxes / currentItem.boxesPerPallet) : 0;
+            const totalPallets = calc.pallets + maxNobPallets;
+            const completedPallets = (prog.completedPallets || 0) + (prog.noblejasCompletedPallets || 0);
             const noblejasDoneBoxes = (prog.noblejasCompletedPallets || 0) * currentItem.boxesPerPallet + (prog.nobjelasPicoCompleted ? (noblejasBoxes % currentItem.boxesPerPallet) : 0);
-            const milagroDoneBoxes = completedPallets * currentItem.boxesPerPallet + (prog.picoCompleted ? calc.pico : 0);
+            const milagroDoneBoxes = (prog.completedPallets || 0) * currentItem.boxesPerPallet + (prog.picoCompleted ? calc.pico : 0);
             const completedBoxes = noblejasDoneBoxes + milagroDoneBoxes;
 
             return {
@@ -225,6 +230,46 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
     };
   }, []);
 
+  // === LIVE PRODUCTION ESTIMATE (actualiza cada 30s) ===
+  useEffect(() => {
+    const tick = () => {
+      setLiveEstimates(prev => {
+        const next: Record<string, number> = { ...prev };
+        const state = useProductionStore.getState();
+        Object.values(state.lineStorage).forEach((lineData: any) => {
+          const lineCode = lineData.code;
+          if (!lineData.isProducing || !lineData.currentProgress) return;
+          const prog = lineData.currentProgress;
+          const intervalMs = prog.lastPalletIntervalMs;
+          const lastUpdated = prog.palletLastUpdated || prog.lastPalletTimestamp || 0;
+          if (!intervalMs || !lastUpdated || intervalMs <= 0) { next[lineCode] = 0; return; }
+          const elapsedMs = Date.now() - lastUpdated;
+          const queue = lineData.queue || [];
+          if (!queue.length) return;
+          const currentItem = queue[0];
+          const boxesPerPallet = currentItem?.boxesPerPallet || 70;
+          // Rate: cajas por ms
+          const rate = boxesPerPallet / intervalMs;
+          // Cajas estimadas desde el último palet registrado
+          const estimatedExtra = Math.min(Math.floor(rate * elapsedMs), boxesPerPallet - 1);
+          next[lineCode] = estimatedExtra;
+        });
+        return next;
+      });
+    };
+    tick(); // inicial
+    const interval = setInterval(tick, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Unidades de ensalada por caja según tipo
+  const getSaladasPerCaja = (boxType: string): number => {
+    if (boxType.includes("12")) return 12;
+    if (boxType.includes("6")) return 6;
+    if (boxType.includes("4")) return 4;
+    return 6; // fallback
+  };
+
   // Quick Action Dinámica Milagro: Avanza Palet o Pico
   const handleQuickMilagroAction = async (item: LineOverview, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -274,10 +319,11 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
       prev.map((o) => {
         if (o.line.id !== item.line.id) return o;
         const newDone = o.completedBoxes + addedBoxes;
+        const totalCompletedP = nextPallets + (prog.noblejasCompletedPallets || 0);
         return {
           ...o,
           completedBoxes: newDone,
-          completedPallets: nextPallets,
+          completedPallets: totalCompletedP,
           percent: Math.min(Math.round((newDone / o.totalBoxes) * 100), 100),
           progress: updatedProg,
         };
@@ -340,9 +386,11 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
       prev.map((o) => {
         if (o.line.id !== item.line.id) return o;
         const newDone = o.completedBoxes + addedBoxes;
+        const totalCompletedP = (prog.completedPallets || 0) + nextNobPallets;
         return {
           ...o,
           completedBoxes: newDone,
+          completedPallets: totalCompletedP,
           noblejasDoneBoxes: o.noblejasDoneBoxes + addedBoxes,
           percent: Math.min(Math.round((newDone / o.totalBoxes) * 100), 100),
           progress: updatedProg,
@@ -350,6 +398,67 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
       })
     );
 
+    await syncProgress(item.currentItem.id, updatedProg);
+    setActionLoadingId(null);
+  };
+
+  // Deshacer último palet Milagro (-1)
+  const handleUndoMilagroPallet = async (item: LineOverview, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!item.currentItem || !item.progress) return;
+    const prog = item.progress;
+    if (prog.completedPallets <= 0 && !prog.picoCompleted) return;
+    setActionLoadingId(`${item.line.id}-undo-mil`);
+    let nextPallets = prog.completedPallets;
+    let nextPicoDone = prog.picoCompleted;
+    let removedBoxes = 0;
+    if (prog.picoCompleted && item.calc) {
+      nextPicoDone = false;
+      removedBoxes = item.calc.pico;
+    } else if (prog.completedPallets > 0) {
+      nextPallets = prog.completedPallets - 1;
+      removedBoxes = item.currentItem.boxesPerPallet;
+    }
+    const updatedProg: FormatProgress = { ...prog, completedPallets: nextPallets, picoCompleted: nextPicoDone, finished: false };
+    useProductionStore.getState().updateLineItemProgress(item.line.code, item.currentItem.id, updatedProg);
+    setOverview(prev => prev.map(o => {
+      if (o.line.id !== item.line.id) return o;
+      const newDone = Math.max(0, o.completedBoxes - removedBoxes);
+      const totalCompletedP = nextPallets + (prog.noblejasCompletedPallets || 0);
+      return { ...o, completedBoxes: newDone, completedPallets: totalCompletedP, percent: Math.min(Math.round((newDone / o.totalBoxes) * 100), 100), progress: updatedProg };
+    }));
+    await syncProgress(item.currentItem.id, updatedProg);
+    setActionLoadingId(null);
+  };
+
+  // Deshacer último palet Noblejas (-1)
+  const handleUndoNoblejasPallet = async (item: LineOverview, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!item.currentItem || !item.progress) return;
+    const prog = item.progress;
+    if (prog.noblejasCompletedPallets <= 0 && !prog.nobjelasPicoCompleted) return;
+    setActionLoadingId(`${item.line.id}-undo-nob`);
+    const maxNobPallets = Math.floor(item.noblejasBoxes / item.currentItem.boxesPerPallet);
+    const nobPicoCajas = item.noblejasBoxes % item.currentItem.boxesPerPallet;
+    let nextNobPallets = prog.noblejasCompletedPallets;
+    let nextNobPicoDone = prog.nobjelasPicoCompleted;
+    let removedBoxes = 0;
+    if (prog.nobjelasPicoCompleted) {
+      nextNobPicoDone = false;
+      removedBoxes = nobPicoCajas;
+    } else if (prog.noblejasCompletedPallets > 0) {
+      nextNobPallets = prog.noblejasCompletedPallets - 1;
+      removedBoxes = item.currentItem.boxesPerPallet;
+    }
+    const isNobDone = nextNobPallets >= maxNobPallets && (nobPicoCajas === 0 || nextNobPicoDone);
+    const updatedProg: FormatProgress = { ...prog, noblejasCompletedPallets: nextNobPallets, nobjelasPicoCompleted: nextNobPicoDone, noblejasCompleted: isNobDone };
+    useProductionStore.getState().updateLineItemProgress(item.line.code, item.currentItem.id, updatedProg);
+    setOverview(prev => prev.map(o => {
+      if (o.line.id !== item.line.id) return o;
+      const newDone = Math.max(0, o.completedBoxes - removedBoxes);
+      const totalCompletedP = (prog.completedPallets || 0) + nextNobPallets;
+      return { ...o, completedBoxes: newDone, completedPallets: totalCompletedP, noblejasDoneBoxes: Math.max(0, o.noblejasDoneBoxes - removedBoxes), percent: Math.min(Math.round((newDone / o.totalBoxes) * 100), 100), progress: updatedProg };
+    }));
     await syncProgress(item.currentItem.id, updatedProg);
     setActionLoadingId(null);
   };
@@ -1061,43 +1170,86 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                           <span className={cn("text-xs font-mono font-bold px-2 py-1 bg-black/5 dark:bg-white/5 rounded-lg border border-black/10 dark:border-white/10", goldMode ? "text-white/80" : "text-[#334155]")}>
                             {item.totalBoxes} cajas totales
                           </span>
-                          {milagroPicoCajas > 0 && (
-                            <span className={cn("text-[11px] font-mono px-2 py-1 rounded-lg border font-bold", goldMode ? "bg-amber-500/10 border-amber-500/20 text-amber-300" : "bg-emerald-50 border-emerald-200 text-emerald-700")}>
-                              Pico Milagro: {milagroPicoCajas}c
-                            </span>
-                          )}
+                          {(() => {
+                            const totalPico = milagroPicoCajas + nobjelasPicoCajas;
+                            if (totalPico <= 0) return null;
+                            if (item.noblejasBoxes > 0 && nobjelasPicoCajas > 0) {
+                              return (
+                                <span className={cn("text-[11px] font-mono px-2 py-1 rounded-lg border font-bold", goldMode ? "bg-amber-500/10 border-amber-500/20 text-amber-300" : "bg-emerald-50 border-emerald-200 text-emerald-700")}>
+                                  ⚡ Pico Total: {totalPico}c {milagroPicoCajas > 0 ? `(${milagroPicoCajas}c Mil + ${nobjelasPicoCajas}c Nob)` : `(${nobjelasPicoCajas}c Nob)`}
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className={cn("text-[11px] font-mono px-2 py-1 rounded-lg border font-bold", goldMode ? "bg-amber-500/10 border-amber-500/20 text-amber-300" : "bg-emerald-50 border-emerald-200 text-emerald-700")}>
+                                ⚡ Pico Milagro: {milagroPicoCajas}c
+                              </span>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>
 
-                    {/* Barra de progreso global con porcentaje */}
-                    <div className="space-y-1.5 pt-1">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span className={goldMode ? "text-white/80" : "text-[#334155]"}>
-                          📦 {item.completedBoxes} de {item.totalBoxes} cajas ({item.completedPallets} / {item.totalPallets} palets)
-                          {item.totalBoxes - item.completedBoxes > 0 && (
-                            <span className="opacity-60 ml-1">({item.totalBoxes - item.completedBoxes} restantes)</span>
+                    {/* Barra de progreso con capa en vivo */}
+                    {(() => {
+                      const liveExtra = liveEstimates[item.line.code] || 0;
+                      const hasLiveData = isProducing && liveExtra > 0 && (item.progress?.lastPalletIntervalMs || 0) > 0;
+                      const confirmedPct = item.percent;
+                      const liveTotalBoxes = item.completedBoxes + liveExtra;
+                      const livePct = Math.min(Math.round((liveTotalBoxes / item.totalBoxes) * 100), 100);
+                      return (
+                        <div className="space-y-1.5 pt-1">
+                          <div className="flex justify-between text-xs font-bold">
+                            <span className={goldMode ? "text-white/80" : "text-[#334155]"}>
+                              📦 {item.completedBoxes}
+                              {hasLiveData && (
+                                <span className={cn("ml-1 font-mono", goldMode ? "text-amber-400" : "text-emerald-500")}>
+                                  +~{liveExtra}
+                                </span>
+                              )}
+                              <span className="opacity-50"> / {item.totalBoxes} cajas</span>
+                              <span className="opacity-40 ml-1">({item.completedPallets}/{item.totalPallets} palets)</span>
+                            </span>
+                            <span className={cn("font-mono font-black text-sm", isFinished ? "text-emerald-500 text-base animate-pulse" : "text-emerald-600")}>
+                              {hasLiveData ? `~${livePct}` : confirmedPct}%
+                            </span>
+                          </div>
+                          <div className={cn(
+                            "h-3.5 rounded-full overflow-hidden border relative",
+                            goldMode ? "bg-white/5 border-white/10" : "bg-slate-200 border-slate-300"
+                          )}>
+                            {/* Capa base: palets confirmados */}
+                            <div
+                              className={cn(
+                                "absolute inset-0 h-full transition-all duration-500 rounded-full",
+                                isFinished
+                                  ? "bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 animate-pulse"
+                                  : "bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-400"
+                              )}
+                              style={{ width: `${confirmedPct}%` }}
+                            />
+                            {/* Capa fantasma: estimación en vivo */}
+                            {hasLiveData && (
+                              <div
+                                className={cn(
+                                  "absolute inset-0 h-full rounded-full transition-all duration-[3000ms] ease-linear",
+                                  goldMode
+                                    ? "bg-amber-400/30"
+                                    : "bg-emerald-400/35"
+                                )}
+                                style={{ width: `${livePct}%` }}
+                              />
+                            )}
+                          </div>
+                          {/* Indicador de velocidad */}
+                          {hasLiveData && item.progress?.lastPalletIntervalMs && (
+                            <p className={cn("text-[10px] font-mono text-right", goldMode ? "text-amber-400/60" : "text-emerald-600/60")}>
+                              ⚡ ~{(item.currentItem?.boxesPerPallet || 70)} cj/{Math.round(item.progress.lastPalletIntervalMs / 60000)}min · estimación en vivo
+                            </p>
                           )}
-                        </span>
-                        <span className={cn("font-mono font-black text-sm", isFinished ? "text-emerald-500 text-base animate-pulse" : "text-emerald-600")}>
-                          {item.percent}%
-                        </span>
-                      </div>
-                      <div className={cn(
-                        "h-3.5 rounded-full overflow-hidden border relative",
-                        goldMode ? "bg-white/5 border-white/10" : "bg-slate-200 border-slate-300"
-                      )}>
-                        <div
-                          className={cn(
-                            "h-full transition-all duration-500 rounded-full",
-                            isFinished
-                              ? "bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 animate-pulse"
-                              : "bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-400"
-                          )}
-                          style={{ width: `${item.percent}%` }}
-                        />
-                      </div>
-                    </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Recordatorio de Cadencia de Palet */}
                     {/* === ALERTA IA: PALET OLVIDADO === */}
@@ -1281,8 +1433,17 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                         )}
                         type="button"
                       >
-                        <Trophy className="w-4 h-4" />
-                        <span>🎉 FINALIZAR ORDEN Y LIMPIAR LÍNEA</span>
+                        {item.pendingCount > 0 ? (
+                          <>
+                            <SkipForward className="w-4 h-4" />
+                            <span>✅ COMPLETADA → SIGUIENTE ({item.pendingCount} en cola)</span>
+                          </>
+                        ) : (
+                          <>
+                            <Trophy className="w-4 h-4" />
+                            <span>🎉 FINALIZAR Y LIMPIAR LÍNEA</span>
+                          </>
+                        )}
                       </button>
                     ) : (
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -1376,6 +1537,70 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                       </div>
                     )}
                   </div>
+
+                  {/* Fila de corrección: deshacer palets */}
+                  {item.progress && (prog.completedPallets > 0 || prog.picoCompleted || prog.noblejasCompletedPallets > 0 || prog.nobjelasPicoCompleted) && (
+                    <div className="flex items-center gap-2 flex-wrap pt-1">
+                      <span className={cn("text-[10px] font-black uppercase tracking-widest opacity-40", goldMode ? "text-white" : "text-slate-500")}>Corregir:</span>
+                      {(prog.completedPallets > 0 || prog.picoCompleted) && (
+                        <button
+                          onClick={(e) => handleUndoMilagroPallet(item, e)}
+                          disabled={actionLoadingId === `${item.line.id}-undo-mil`}
+                          className={cn(
+                            "h-7 px-2.5 rounded-lg text-[11px] font-bold flex items-center gap-1 border transition-all active:scale-95 disabled:opacity-40",
+                            goldMode
+                              ? "bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20"
+                              : "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"
+                          )}
+                          type="button"
+                          title="Deshacer último palet Milagro"
+                        >
+                          <Minus className="w-3 h-3" /> Milagro
+                        </button>
+                      )}
+                      {item.noblejasBoxes > 0 && (prog.noblejasCompletedPallets > 0 || prog.nobjelasPicoCompleted) && (
+                        <button
+                          onClick={(e) => handleUndoNoblejasPallet(item, e)}
+                          disabled={actionLoadingId === `${item.line.id}-undo-nob`}
+                          className={cn(
+                            "h-7 px-2.5 rounded-lg text-[11px] font-bold flex items-center gap-1 border transition-all active:scale-95 disabled:opacity-40",
+                            goldMode
+                              ? "bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20"
+                              : "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"
+                          )}
+                          type="button"
+                          title="Deshacer último palet Noblejas"
+                        >
+                          <Minus className="w-3 h-3" /> Noblejas
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Resumen simple: cuánto falta en ensaladas */}
+                  {(() => {
+                    const cajasRestantes = item.totalBoxes - item.completedBoxes;
+                    if (cajasRestantes <= 0) return null;
+                    const saladasPerCaja = getSaladasPerCaja(item.currentBoxType || "");
+                    const saladasRestantes = cajasRestantes * saladasPerCaja;
+                    return (
+                      <div className={cn(
+                        "flex items-center justify-between px-3 py-2 rounded-xl border text-xs",
+                        goldMode ? "bg-white/3 border-white/8 text-white/70" : "bg-slate-50 border-slate-200 text-slate-600"
+                      )}>
+                        <span className="font-bold">Quedan:</span>
+                        <div className="flex items-center gap-3">
+                          <span className={cn("font-mono font-black text-sm", goldMode ? "text-amber-300" : "text-emerald-700")}>
+                            {cajasRestantes} cajas
+                          </span>
+                          <span className="opacity-40">·</span>
+                          <span className={cn("font-mono font-black text-sm", goldMode ? "text-white" : "text-slate-800")}>
+                            ~{saladasRestantes.toLocaleString()} uds
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Siguiente Orden en Cola si existe */}
                   {item.nextItem && (() => {
