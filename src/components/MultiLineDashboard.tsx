@@ -91,6 +91,9 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
   const [connectionTest, setConnectionTest] = useState<SupabaseTestResult | null>(null);
   const [isClearDBConfirmOpen, setIsClearDBConfirmOpen] = useState(false);
   const [openSettingsLineCode, setOpenSettingsLineCode] = useState<string | null>(null);
+  const [clearLineTarget, setClearLineTarget] = useState<string | null>(null);
+  // AI anomaly alerts: { [lineCode]: { message, level, firedAt } }
+  const [aiAlerts, setAiAlerts] = useState<Record<string, { message: string; level: "warning" | "critical"; firedAt: number }>>({});
   const [collapsedQueues, setCollapsedQueues] = useState<Record<string, boolean>>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("dashboardCollapsedQueues");
@@ -829,11 +832,42 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           const isFinished = hasActiveOrders && (item.percent >= 100 || prog.finished);
           const isProducing = item.line.isProducing && hasActiveOrders && !isFinished;
 
-          // Recordatorio inteligente de palet (> 5 min sin registrar palet en marcha)
+          // === DETECCIÓN DE ANOMALÍA (ritmo histórico + IA) ===
           const now = Date.now();
           const lastUpdated = prog.palletLastUpdated || prog.lastPalletTimestamp || 0;
           const minutesSinceLastPallet = lastUpdated > 0 ? Math.floor((now - lastUpdated) / 60000) : 0;
-          const showPalletCadenceReminder = isProducing && minutesSinceLastPallet >= 5;
+          const estimatedPalletMinutes = prog.lastPalletIntervalMs ? Math.round(prog.lastPalletIntervalMs / 60000) : 0;
+
+          // Thresholds dinámicos según ritmo real o fallback de 5 min
+          const warningThreshold = estimatedPalletMinutes > 0 ? estimatedPalletMinutes * 1.5 : 8;
+          const criticalThreshold = estimatedPalletMinutes > 0 ? estimatedPalletMinutes * 2.2 : 15;
+
+          const isDelayWarning = isProducing && minutesSinceLastPallet >= warningThreshold;
+          const isDelayCritical = isProducing && minutesSinceLastPallet >= criticalThreshold;
+          const showPalletCadenceReminder = isDelayWarning;
+
+          // Disparar IA solo si: es crítico, tenemos historial y no hemos alertado en los últimos 10 min
+          const existingAlert = aiAlerts[item.line.code];
+          const aiCooldownOk = !existingAlert || (now - existingAlert.firedAt) > 10 * 60 * 1000;
+          if (isDelayCritical && estimatedPalletMinutes > 0 && aiCooldownOk) {
+            // Lanzar llamada IA (fuera del render, async)
+            const lineCode = item.line.code;
+            const saladName = item.currentSaladName || "Ensalada";
+            const completed = prog.completedPallets;
+            const total = totalMilagroPallets;
+            setAiAlerts(prev => ({ ...prev, [lineCode]: { message: "", level: "critical", firedAt: now } }));
+            fetch("/api/anomaly", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ lineCode, saladName, expectedMinutes: estimatedPalletMinutes, elapsedMinutes: minutesSinceLastPallet, completedPallets: completed, totalPallets: total })
+            }).then(r => r.json()).then(data => {
+              setAiAlerts(prev => ({ ...prev, [lineCode]: { message: data.message || "", level: data.level || "critical", firedAt: now } }));
+            }).catch(() => {});
+          }
+          // Limpiar alerta si la línea se normaliza
+          if (!isDelayWarning && existingAlert) {
+            setAiAlerts(prev => { const n = { ...prev }; delete n[item.line.code]; return n; });
+          }
 
           const hasMilagroPalletsLeft = prog.completedPallets < totalMilagroPallets;
           const hasMilagroPicoLeft = milagroPicoCajas > 0 && !prog.picoCompleted;
@@ -842,10 +876,6 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           const hasNobPalletsLeft = maxNobPallets > 0 && prog.noblejasCompletedPallets < maxNobPallets;
           const hasNobPicoLeft = nobjelasPicoCajas > 0 && !prog.nobjelasPicoCompleted;
           const isNobDone = item.noblejasBoxes > 0 && !hasNobPalletsLeft && !hasNobPicoLeft;
-
-          // Estimación de tiempo por palet y alerta
-          const estimatedPalletMinutes = prog.lastPalletIntervalMs ? Math.round(prog.lastPalletIntervalMs / 60000) : 0;
-          const isDelayWarning = isProducing && estimatedPalletMinutes > 0 && minutesSinceLastPallet > (estimatedPalletMinutes * 0.75); // Alerta si supera el 75% del tiempo esperado
 
           return (
             <div
@@ -926,10 +956,8 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                           className={cn("w-full text-left px-4 py-2.5 flex items-center gap-2 hover:bg-red-500/10 transition-colors text-red-500 font-medium rounded-lg text-sm")}
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (confirm(`¿Estás seguro de que quieres limpiar la ${item.line.code} (Detener y borrar cola)?`)) {
-                              useProductionStore.getState().multiLineClearQueueAndSalads(item.line.code);
-                              setOpenSettingsLineCode(null);
-                            }
+                            setClearLineTarget(item.line.code);
+                            setOpenSettingsLineCode(null);
                           }}
                         >
                           <Trash2 className="w-4 h-4" /> Limpiar Línea
@@ -1004,25 +1032,28 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                           <span>{formatDisplayName(item.currentItem?.codigo10e, item.currentSaladName)}</span>
                         </h4>
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
-                          {item.currentItem?.codigo10e && (
-                            <span className={cn(
-                              "text-xs font-mono font-black px-2.5 py-1 rounded-lg border shadow-sm",
-                              goldMode ? "bg-amber-500/15 border-amber-500/30 text-amber-400" : "bg-emerald-100 border-emerald-300 text-emerald-800"
-                            )}>
-                              {item.currentItem.codigo10e}
-                            </span>
-                          )}
+                          {/* Lote + DLC combinados en un badge visual */}
                           {item.currentLote && (
-                            <span className={cn(
-                              "text-xs font-mono font-bold px-2.5 py-1 rounded-lg border shadow-sm",
-                              goldMode ? "bg-purple-500/15 border-purple-500/30 text-purple-300" : "bg-purple-100 border-purple-300 text-purple-800"
+                            <div className={cn(
+                              "flex items-center gap-0 rounded-xl overflow-hidden border shadow-sm font-mono font-black text-xs",
+                              goldMode ? "border-purple-500/30" : "border-purple-300"
                             )}>
-                              Lote: {item.currentLote}
-                            </span>
+                              <span className={cn(
+                                "px-2.5 py-1.5 flex items-center gap-1",
+                                goldMode ? "bg-purple-500/20 text-purple-300" : "bg-purple-100 text-purple-700"
+                              )}>
+                                🏷️ Lote: {item.currentLote}
+                              </span>
+                              {item.currentItem?.fechaCaducidad && (
+                                <span className={cn(
+                                  "px-2.5 py-1.5 flex items-center gap-1 border-l",
+                                  goldMode ? "bg-purple-500/10 border-purple-500/30 text-purple-400/80" : "bg-purple-50 border-purple-200 text-purple-600"
+                                )}>
+                                  📅 DLC: {item.currentItem.fechaCaducidad}
+                                </span>
+                              )}
+                            </div>
                           )}
-                          <span className="text-[10px] font-bold text-white/40 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1 select-none shrink-0 uppercase tracking-wider">
-                            🏁 Fin de Cola
-                          </span>
                           <span className="text-xs font-bold text-emerald-600 flex items-center gap-1 bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20">
                             <span>📦</span>
                             <span>{item.currentBoxType}</span>
@@ -1069,16 +1100,42 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                     </div>
 
                     {/* Recordatorio de Cadencia de Palet */}
+                    {/* === ALERTA IA: PALET OLVIDADO === */}
                     {showPalletCadenceReminder && (
                       <div className={cn(
-                        "p-2.5 rounded-xl border flex items-center justify-between text-xs animate-pulse",
-                        goldMode ? "bg-amber-500/15 border-amber-500/40 text-amber-200" : "bg-amber-50 border-amber-300 text-amber-800"
+                        "p-3 rounded-xl border flex items-start gap-3 animate-pulse",
+                        isDelayCritical
+                          ? (goldMode ? "bg-red-500/15 border-red-500/40 text-red-300" : "bg-red-50 border-red-300 text-red-800")
+                          : (goldMode ? "bg-amber-500/15 border-amber-500/40 text-amber-200" : "bg-amber-50 border-amber-300 text-amber-800")
                       )}>
-                        <div className="flex items-center gap-2">
-                          <Bell className="w-4 h-4 text-amber-500 shrink-0" />
-                          <span className="font-bold">Hace {minutesSinceLastPallet} min del último palet. ¿Completaste uno?</span>
+                        <div className={cn(
+                          "mt-0.5 shrink-0 w-7 h-7 rounded-full flex items-center justify-center",
+                          isDelayCritical ? "bg-red-500/20" : "bg-amber-500/20"
+                        )}>
+                          <Bell className={cn("w-3.5 h-3.5", isDelayCritical ? "text-red-500" : "text-amber-500")} />
                         </div>
-                        <span className="font-mono text-[10px] underline">Pulsa +1 Palet</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-black text-xs uppercase tracking-wide">
+                              {isDelayCritical ? "🔴 Posible palet olvidado" : "🟡 Retraso detectado"}
+                            </span>
+                            <span className="font-mono text-[10px] opacity-70">
+                              {minutesSinceLastPallet}m / esperado ~{estimatedPalletMinutes > 0 ? `${estimatedPalletMinutes}m` : ">5m"}
+                            </span>
+                          </div>
+                          {/* Mensaje IA (si ya cargó) */}
+                          {isDelayCritical && aiAlerts[item.line.code]?.message && (
+                            <p className="text-xs mt-1 font-medium opacity-90 leading-relaxed">
+                              {aiAlerts[item.line.code].message}
+                            </p>
+                          )}
+                          {isDelayCritical && !aiAlerts[item.line.code]?.message && (
+                            <p className="text-xs mt-1 opacity-60 italic">Analizando situación... ⌛</p>
+                          )}
+                          {!isDelayCritical && (
+                            <p className="text-xs mt-0.5 opacity-80">¿Completaste un palet? Pulsa el botón para registrarlo.</p>
+                          )}
+                        </div>
                       </div>
                     )}
 
@@ -1822,6 +1879,70 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
         onOpenChange={setNoblejasUploaderOpen} 
         goldMode={goldMode} 
       />
+      {/* === MODAL CONFIRMACIÓN LIMPIAR LÍNEA === */}
+      {clearLineTarget && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-150">
+          <div className={cn(
+            "w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl border animate-in zoom-in-95 duration-200",
+            goldMode ? "bg-[#120e06] border-amber-500/20" : "bg-white border-slate-200"
+          )}>
+            {/* Header */}
+            <div className={cn(
+              "px-6 pt-6 pb-4 flex flex-col items-center text-center gap-3",
+            )}>
+              <div className={cn(
+                "w-16 h-16 rounded-full flex items-center justify-center",
+                "bg-red-500/10 text-red-500"
+              )}>
+                <Trash2 className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className={cn("text-xl font-black", goldMode ? "text-white" : "text-slate-800")}>
+                  Limpiar Línea {clearLineTarget}
+                </h3>
+                <p className={cn("text-sm mt-1", goldMode ? "text-white/50" : "text-slate-500")}>
+                  Se detendrá la producción y se borrará toda la cola de órdenes. Esta acción no se puede deshacer.
+                </p>
+              </div>
+            </div>
+
+            {/* Confirm typing */}
+            <div className={cn(
+              "px-6 pb-5 flex flex-col gap-3"
+            )}>
+              <div className={cn(
+                "p-3 rounded-xl border text-sm font-mono text-center font-bold",
+                goldMode ? "bg-red-500/10 border-red-500/20 text-red-400" : "bg-red-50 border-red-200 text-red-600"
+              )}>
+                ⚠️ Línea {clearLineTarget}: 0 órdenes · Cola vacía
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setClearLineTarget(null)}
+                  className={cn(
+                    "flex-1 py-2.5 rounded-xl font-bold text-sm border transition-all active:scale-95",
+                    goldMode
+                      ? "border-white/15 text-white hover:bg-white/5"
+                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                  )}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    useProductionStore.getState().multiLineClearQueueAndSalads(clearLineTarget);
+                    setClearLineTarget(null);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl font-black text-sm bg-red-500 hover:bg-red-600 text-white transition-all active:scale-95 shadow-lg shadow-red-500/30"
+                >
+                  Sí, limpiar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
