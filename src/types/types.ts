@@ -42,6 +42,7 @@ export interface Format {
   cambioLote?: boolean;
   note?: string;
   fechaCaducidad?: string;
+  codigo10e?: string;
   linea?: string;
 }
 
@@ -74,7 +75,9 @@ export interface QueueItem {
   lote?: string;
   cambioLote?: boolean;
   fechaCaducidad?: string;
+  codigo10e?: string;
   linea?: string;
+  createdAt?: number;
 }
 
 // ===== PROGRESO DE FORMATO =====
@@ -102,7 +105,7 @@ export type TransitionType = "same" | "box-change" | "salad-change" | "lote-chan
 // ===== FUNCIONES AUXILIARES =====
 
 export function calculateFormat(format: Format): FormatCalculations {
-  const production = format.quantity - format.noblejas;
+  const production = Math.max(0, format.quantity - format.noblejas);
   const pallets = Math.floor(production / format.boxesPerPallet);
   const pico = production % format.boxesPerPallet;
   return { production, pallets, pico };
@@ -216,6 +219,16 @@ export interface LineOverview {
   calc?: { pallets: number; pico: number; production: number };
   progress?: FormatProgress;
   queue?: QueueItem[];
+  currentQueueIndex?: number;
+}
+
+export interface OrderRow {
+  id: string;
+  codigo10e: string;
+  name: string;
+  boxType: string;
+  quantity: string;
+  lote: string;
 }
 
 export interface TemplateItem {
@@ -236,7 +249,6 @@ export interface HistoryItem {
   boxesPerPallet: number;
   date: string;
   duration?: string;
+  operator?: string;
 }
-
-
-
+export interface ParsedExcelRow { id: string; codigo: string; nombre: string; recurso: string; linea: string; estado: string; cantidad: number; lote: string; dlc: string; boxType: string; boxesPerPallet: number; selected: boolean; timestamp: number; }

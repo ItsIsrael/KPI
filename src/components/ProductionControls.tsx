@@ -356,7 +356,7 @@ export function ProductionControls() {
           className="w-full h-14 md:h-16 text-lg md:text-xl font-black rounded-2xl transition-all duration-150 active:scale-95 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/30 animate-pulse"
           id="finish-format-btn"
         >
-          FINALIZAR FORMATO
+          {queue.length > currentQueueIndex + 1 ? "IR A LA SIGUIENTE" : "FINALIZAR FORMATO"}
         </Button>
       )}
     </div>

@@ -4,6 +4,21 @@ import { useEffect, useState } from "react";
 import type { LineOverview, FormatProgress, Salad, QueueItem, HistoryItem } from "@/types/types";
 import { calculateFormat, DEFAULT_BOX_TYPES, generateId, DEFAULT_SALADS } from "@/types/types";
 import { getFactoryOverview, syncProgress, syncLineState, syncQueueItems, saveHistoryLog, subscribeToGlobalChanges } from "@/lib/supabase-service";
+
+function formatDisplayName(codigo10e?: string, name?: string) {
+  if (!name) return "";
+  if (!codigo10e) return name;
+  
+  const upperName = name.toUpperCase();
+  const upperCode = codigo10e.toUpperCase();
+  
+  if (upperName.includes(`[${upperCode}]`)) {
+    return name;
+  }
+  
+  return `[${upperCode}] ${name}`;
+}
+
 import { testSupabaseConnection, type SupabaseTestResult } from "@/lib/supabase-test";
 import { useProductionStore } from "@/store/production-store";
 import { cn } from "@/lib/utils";
@@ -24,9 +39,15 @@ import {
   Bell,
   Trash2,
   X,
-  Camera
+  Camera,
+  ListChecks,
+  Database,
+  FileSpreadsheet,
+  Settings
 } from "lucide-react";
-import { OcrScanner } from "@/components/OcrScanner";
+import { ManualOrderScanner } from "@/components/ManualOrderScanner";
+import { ExcelUploader } from "@/components/ExcelUploader";
+import { NoblejasUploader } from "@/components/NoblejasUploader";
 
 interface MultiLineDashboardProps {
   onSelectLine: (lineCode: string) => void;
@@ -68,18 +89,39 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
     }
   }, [customSelectedLines]);
   const [connectionTest, setConnectionTest] = useState<SupabaseTestResult | null>(null);
+  const [isClearDBConfirmOpen, setIsClearDBConfirmOpen] = useState(false);
+  const [openSettingsLineCode, setOpenSettingsLineCode] = useState<string | null>(null);
+  const [collapsedQueues, setCollapsedQueues] = useState<Record<string, boolean>>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("dashboardCollapsedQueues");
+      if (saved) return JSON.parse(saved);
+    }
+    return {};
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("dashboardCollapsedQueues", JSON.stringify(collapsedQueues));
+    }
+  }, [collapsedQueues]);
+
   const [isTestingConn, setIsTestingConn] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
 
   // Modal para Cargar Ensalada Rápida directamente desde el Dashboard
   const [quickAddLineCode, setQuickAddLineCode] = useState<string | null>(null);
-  const [isOcrScannerOpen, setOcrScannerOpen] = useState(false);
   const [modalSaladName, setModalSaladName] = useState<string>("César");
   const [modalBoxType, setModalBoxType] = useState<string>("Cartón 4");
   const [modalBoxes, setModalBoxes] = useState<string>("");
   const [modalNoblejas, setModalNoblejas] = useState<string>("0");
   const [modalLote, setModalLote] = useState<string>("");
+  const [isNoblejasConfigOpen, setIsNoblejasConfigOpen] = useState(false);
+  const [newCode10e, setNewCode10e] = useState("");
+  const [newBoxes10e, setNewBoxes10e] = useState("");
+  const [isManualScannerOpen, setManualScannerOpen] = useState(false);
+  const [isExcelUploaderOpen, setExcelUploaderOpen] = useState(false);
+  const [isNoblejasUploaderOpen, setNoblejasUploaderOpen] = useState(false);
 
   const fetchOverview = async () => {
     const requestId = ++currentDashboardRequestId;
@@ -590,6 +632,24 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           </div>
 
           <button
+            onClick={() => setExcelUploaderOpen(true)}
+            className={cn("h-8 w-8 rounded-xl flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-sm border", goldMode ? "border-white/10 bg-white/5 hover:bg-white/10 text-white" : "border-emerald-600/20 bg-white hover:bg-emerald-50 text-emerald-700")}
+            title="Cargar Plan de Producción (Excel)"
+            type="button"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            onClick={() => setNoblejasUploaderOpen(true)}
+            className={cn("h-8 w-8 rounded-xl flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-sm border", goldMode ? "border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400" : "border-emerald-600/20 bg-white hover:bg-emerald-50 text-emerald-700")}
+            title="Cargar Cajas Noblejas"
+            type="button"
+          >
+            <Package className="w-3.5 h-3.5" />
+          </button>
+
+          <button
             onClick={() => {
               fetchOverview();
               handleTestConnection();
@@ -727,8 +787,26 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
         "grid gap-5",
         isDuoView ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-2"
       )}>
-        {displayedLines.map((item) => {
-          const currentItem = item.currentItem;
+        {loading && overview.length === 0 ? (
+          Array.from({ length: 4 }).map((_, idx) => (
+            <div key={idx} className={cn(
+              "rounded-3xl p-6 border shadow-lg flex flex-col gap-4 animate-pulse",
+              goldMode ? "bg-[#141006]/50 border-amber-500/10" : "bg-white/50 border-emerald-600/10"
+            )}>
+              <div className="flex items-center gap-3">
+                <div className={cn("w-12 h-12 rounded-2xl", goldMode ? "bg-amber-500/20" : "bg-emerald-600/20")} />
+                <div className="flex flex-col gap-2 flex-1">
+                  <div className={cn("h-5 w-32 rounded", goldMode ? "bg-amber-500/20" : "bg-emerald-600/20")} />
+                  <div className={cn("h-3 w-20 rounded", goldMode ? "bg-amber-500/10" : "bg-emerald-600/10")} />
+                </div>
+              </div>
+              <div className={cn("h-24 w-full rounded-2xl mt-2", goldMode ? "bg-white/5" : "bg-gray-100")} />
+              <div className={cn("h-12 w-full rounded-xl mt-2", goldMode ? "bg-white/5" : "bg-gray-100")} />
+            </div>
+          ))
+        ) : (
+          displayedLines.map((item) => {
+            const currentItem = item.currentItem;
           const calc = item.calc;
           const prog = item.progress || {
             queueItemId: item.currentItem ? item.currentItem.id : "",
@@ -772,9 +850,8 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           return (
             <div
               key={item.line.id}
-              onClick={() => onSelectLine(item.line.code)}
               className={cn(
-                "rounded-3xl p-5 sm:p-6 border transition-all duration-300 hover:shadow-2xl cursor-pointer relative overflow-hidden group space-y-4",
+                "rounded-3xl p-5 sm:p-6 border transition-all duration-300 hover:shadow-2xl relative overflow-hidden group space-y-4",
                 !hasActiveOrders && "h-fit self-start",
                 goldMode
                   ? "border-amber-500/25 hover:border-amber-500/50 bg-[#120e06]/60 backdrop-blur-xl text-white shadow-[0_8px_32px_0_rgba(245,158,11,0.1)]"
@@ -810,21 +887,56 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
 
                 {/* Badge Reactivo Automático (Sin doble punto y sin acción manual forzada) */}
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setQuickAddLineCode(item.line.code);
-                      setOcrScannerOpen(true);
-                    }}
-                    className={cn(
-                      "h-8 px-2.5 rounded-xl flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-sm border group",
-                      goldMode ? "border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400" : "border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700"
+
+                  <div className="relative">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenSettingsLineCode(openSettingsLineCode === item.line.code ? null : item.line.code);
+                      }}
+                      className={cn(
+                        "h-8 px-2.5 rounded-xl flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-sm border",
+                        goldMode ? "border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400" : "border-gray-200 bg-white hover:bg-gray-50 text-gray-700"
+                      )}
+                      title="Ajustes de Línea"
+                      type="button"
+                    >
+                      <Settings className="w-4 h-4" />
+                    </button>
+                    {openSettingsLineCode === item.line.code && (
+                      <div className={cn(
+                        "absolute right-0 top-full mt-1 w-56 rounded-xl shadow-lg border p-1.5 z-50 animate-in fade-in zoom-in-95 flex flex-col gap-1",
+                        goldMode ? "bg-[#120e06] border-white/10" : "bg-white border-gray-200"
+                      )}>
+                        <button
+                          className={cn(
+                            "w-full text-left px-3 py-2 flex items-center gap-2 transition-colors font-medium rounded-lg text-sm",
+                            goldMode ? "hover:bg-blue-500/10 text-blue-400" : "hover:bg-blue-50 text-blue-700"
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setQuickAddLineCode(item.line.code);
+                            setManualScannerOpen(true);
+                            setOpenSettingsLineCode(null);
+                          }}
+                        >
+                          <ListChecks className="w-4 h-4" /> Ingreso Manual
+                        </button>
+                        <button
+                          className={cn("w-full text-left px-4 py-2.5 flex items-center gap-2 hover:bg-red-500/10 transition-colors text-red-500 font-medium rounded-lg text-sm")}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm(`¿Estás seguro de que quieres limpiar la ${item.line.code} (Detener y borrar cola)?`)) {
+                              useProductionStore.getState().multiLineClearQueueAndSalads(item.line.code);
+                              setOpenSettingsLineCode(null);
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" /> Limpiar Línea
+                        </button>
+                      </div>
                     )}
-                    title="Carga Inteligente con Cámara (OCR)"
-                    type="button"
-                  >
-                    <Camera className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                  </button>
+                  </div>
                   <div
                     className={cn(
                       "h-8 px-3 rounded-xl border text-[11px] font-black uppercase tracking-wider flex items-center gap-2 shadow-sm select-none",
@@ -887,42 +999,44 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                             <span>🌿 ORDEN DE FABRICACIÓN ACTUAL</span>
                           )}
                         </p>
-                        <h4 className={cn("text-xl sm:text-2xl font-black leading-tight mt-0.5 flex items-center gap-1.5", goldMode ? "text-white" : "text-[#0f291e]")}>
+                        <h4 className={cn("text-xl sm:text-2xl font-black leading-tight mt-0.5 flex items-center gap-1.5 flex-wrap", goldMode ? "text-white" : "text-[#0f291e]")}>
                           <span>🥗</span>
-                          <span>{item.currentSaladName}</span>
+                          <span>{formatDisplayName(item.currentItem?.codigo10e, item.currentSaladName)}</span>
                         </h4>
-                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                          <span className="text-[10px] font-bold text-white/40 bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 select-none shrink-0 uppercase tracking-widest">
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          {item.currentItem?.codigo10e && (
+                            <span className={cn(
+                              "text-xs font-mono font-black px-2.5 py-1 rounded-lg border shadow-sm",
+                              goldMode ? "bg-amber-500/15 border-amber-500/30 text-amber-400" : "bg-emerald-100 border-emerald-300 text-emerald-800"
+                            )}>
+                              {item.currentItem.codigo10e}
+                            </span>
+                          )}
+                          {item.currentLote && (
+                            <span className={cn(
+                              "text-xs font-mono font-bold px-2.5 py-1 rounded-lg border shadow-sm",
+                              goldMode ? "bg-purple-500/15 border-purple-500/30 text-purple-300" : "bg-purple-100 border-purple-300 text-purple-800"
+                            )}>
+                              Lote: {item.currentLote}
+                            </span>
+                          )}
+                          <span className="text-[10px] font-bold text-white/40 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1 select-none shrink-0 uppercase tracking-wider">
                             🏁 Fin de Cola
                           </span>
-                          <span className="text-xs font-bold text-emerald-600 flex items-center gap-1">
+                          <span className="text-xs font-bold text-emerald-600 flex items-center gap-1 bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20">
                             <span>📦</span>
                             <span>{item.currentBoxType}</span>
                           </span>
-                          <span className="opacity-30">|</span>
-                          <span className={cn("text-xs font-mono font-bold", goldMode ? "text-white/70" : "text-[#334155]")}>
+                          <span className={cn("text-xs font-mono font-bold px-2 py-1 bg-black/5 dark:bg-white/5 rounded-lg border border-black/10 dark:border-white/10", goldMode ? "text-white/80" : "text-[#334155]")}>
                             {item.totalBoxes} cajas totales
                           </span>
                           {milagroPicoCajas > 0 && (
-                            <span className={cn("text-[11px] font-mono px-2 py-0.5 rounded-lg border", goldMode ? "bg-amber-500/10 border-amber-500/20 text-amber-300" : "bg-emerald-50 border-emerald-200 text-emerald-700")}>
+                            <span className={cn("text-[11px] font-mono px-2 py-1 rounded-lg border font-bold", goldMode ? "bg-amber-500/10 border-amber-500/20 text-amber-300" : "bg-emerald-50 border-emerald-200 text-emerald-700")}>
                               Pico Milagro: {milagroPicoCajas}c
                             </span>
                           )}
                         </div>
                       </div>
-
-                      {item.currentLote && (
-                        <div className="text-right">
-                          <span className={cn(
-                            "text-[10px] font-mono font-bold px-2.5 py-1 rounded-xl block border",
-                            goldMode
-                              ? "bg-purple-500/20 text-purple-300 border-purple-500/35"
-                              : "bg-purple-50 text-purple-700 border-purple-200"
-                          )}>
-                            🏷️ Lote: {item.currentLote}
-                          </span>
-                        </div>
-                      )}
                     </div>
 
                     {/* Barra de progreso global con porcentaje */}
@@ -1223,7 +1337,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                               A CONTINUACIÓN
                             </span>
                             <span className={cn("font-bold text-sm", goldMode ? "text-white" : "text-[#0f291e]")}>
-                              🥗 {item.nextItem.saladName}
+                              🥗 {formatDisplayName(item.nextItem.codigo10e, item.nextItem.saladName)}
                             </span>
                             <span className={cn("font-bold", goldMode ? "text-amber-400/80" : "text-emerald-700")}>· 📦 {item.nextItem.boxType}</span>
                           </div>
@@ -1244,6 +1358,97 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                       </div>
                     );
                   })()}
+
+                  {/* Resto de la cola (Siguientes) */}
+                  {item.queue && item.queue.length > (item.currentQueueIndex || 0) + 2 && (
+                    <div className="flex flex-col gap-2 mt-2">
+                      <div 
+                        className="flex items-center gap-2 cursor-pointer select-none py-1 group/acc"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCollapsedQueues(prev => ({ ...prev, [item.line.code]: !prev[item.line.code] }));
+                        }}
+                      >
+                        <div className="text-[10px] uppercase font-black tracking-widest opacity-50 px-1 group-hover/acc:opacity-80 transition-opacity">
+                          Siguientes en Cola ({(item.queue?.length || 0) - (item.currentQueueIndex || 0) - 2})
+                        </div>
+                        <span className="text-[10px] opacity-40">Click para ver</span>
+                      </div>
+                      
+                      {!collapsedQueues[item.line.code] && item.queue.slice((item.currentQueueIndex || 0) + 2).map((qItem, idx) => {
+                        const realIndex = (item.currentQueueIndex || 0) + 2 + idx;
+                        const nextNobPallets = Math.floor(qItem.noblejas / qItem.boxesPerPallet);
+                        const nextNobPico = qItem.noblejas % qItem.boxesPerPallet;
+                        const totalPallets = Math.floor(qItem.quantity / qItem.boxesPerPallet);
+                        const picoBoxes = qItem.quantity % qItem.boxesPerPallet;
+                        return (
+                          <div key={qItem.id} className={cn(
+                            "border rounded-xl p-2.5 flex flex-col gap-1.5 text-xs relative group",
+                            goldMode ? "bg-white/[0.01] border-white/5" : "bg-emerald-50/40 border-emerald-600/15"
+                          )}>
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={cn("font-bold text-sm", goldMode ? "text-white" : "text-[#0f291e]")}>
+                                  <span className="opacity-40 text-[10px] mr-1.5">#{realIndex + 1}</span>🥗 {formatDisplayName(qItem.codigo10e, qItem.saladName)}
+                                </span>
+                                <span className={cn("font-bold", goldMode ? "text-amber-400/80" : "text-emerald-700")}>· 📦 {qItem.boxType}</span>
+                              </div>
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={() => useProductionStore.getState().multiLineReorderQueue(item.line.code, realIndex, realIndex - 1)}
+                                  className="p-1 rounded hover:bg-black/10 transition-colors"
+                                  title="Subir"
+                                >
+                                  <span className="text-[10px]">⬆️</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => useProductionStore.getState().multiLineReorderQueue(item.line.code, realIndex, realIndex + 1)}
+                                  disabled={realIndex === (item.queue?.length || 0) - 1}
+                                  className="p-1 rounded hover:bg-black/10 disabled:opacity-30 transition-colors"
+                                  title="Bajar"
+                                >
+                                  <span className="text-[10px]">⬇️</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    useProductionStore.getState().multiLineRemoveFromQueue(item.line.code, realIndex);
+                                  }}
+                                  className="p-1 rounded hover:bg-red-500/20 text-red-500 transition-colors"
+                                  title="Eliminar"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-foreground/60 font-mono bg-foreground/5 px-1.5 py-0.5 rounded text-[10px]">
+                                {qItem.quantity} cajas ({totalPallets}p + {picoBoxes}c)
+                              </span>
+                              {qItem.codigo10e && (
+                                <span className={cn(
+                                  "font-mono font-bold px-1.5 py-0.5 rounded text-[10px]",
+                                  goldMode 
+                                    ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" 
+                                    : "bg-slate-500/10 text-slate-500 border border-slate-500/20"
+                                )}>
+                                  🏷️ {qItem.codigo10e} {qItem.noblejas > 0 && "· 💜 Noblejas"}
+                                </span>
+                              )}
+                              {qItem.noblejas > 0 && (
+                                <span className="text-purple-600 dark:text-purple-400 font-bold text-[10px]">
+                                  Nob: {qItem.noblejas} ({nextNobPallets}p + {nextNobPico}c)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ) : (
                 /* Estado vacío con botón rápido de carga directa */
@@ -1285,7 +1490,8 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
               </div>
             </div>
           );
-        })}
+          })
+        )}
       </div>
 
       {/* Modal Popup para Cargar Ensalada Rápida desde el Dashboard */}
@@ -1434,14 +1640,163 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
         </div>
       )}
 
-      {isOcrScannerOpen && quickAddLineCode && (
-        <OcrScanner
+      {/* Scanner Manual Modal */}
+      {isManualScannerOpen && quickAddLineCode && (
+        <ManualOrderScanner
           targetLineCode={quickAddLineCode}
           onClose={() => {
-            setOcrScannerOpen(false);
+            setManualScannerOpen(false);
             setQuickAddLineCode(null);
           }}
         />
+      )}
+
+      {/* Modal: Configurar Noblejas 10E */}
+      {isNoblejasConfigOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className={cn(
+            "relative w-full max-w-md p-6 rounded-3xl border shadow-2xl flex flex-col gap-6",
+            goldMode ? "bg-[#141006] border-amber-500/30 text-white" : "bg-white border-emerald-600/20 text-[#0f291e]"
+          )}>
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-black">Diccionario Noblejas (10E)</h3>
+              <button onClick={() => setIsNoblejasConfigOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+                <X className="w-5 h-5 opacity-50" />
+              </button>
+            </div>
+            
+            <p className="text-sm opacity-70">
+              Configura cuántas cajas van a Noblejas por cada código 10E. Al escanear con la IA o agregar manualmente, se asignarán automáticamente.
+            </p>
+
+            <div className="flex flex-col gap-3 max-h-60 overflow-y-auto pr-2">
+              {Object.entries(useProductionStore.getState().noblejasConfig).length === 0 && (
+                <div className="text-center p-4 opacity-50 text-sm italic border rounded-xl border-dashed">
+                  No hay códigos 10E configurados.
+                </div>
+              )}
+              {Object.entries(useProductionStore.getState().noblejasConfig).map(([code, boxes]) => (
+                <div key={code} className="flex justify-between items-center p-3 border rounded-xl bg-slate-50/5">
+                  <div className="flex gap-2 items-center">
+                    <span className="font-bold">{code}</span>
+                    <ArrowRight className="w-4 h-4 opacity-50" />
+                    <span className="text-emerald-600 font-bold">{boxes} cajas</span>
+                  </div>
+                  <button 
+                    onClick={() => useProductionStore.getState().removeNoblejasConfig(code)}
+                    className="p-2 hover:bg-red-500/10 text-red-500 rounded-lg transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-2 items-end pt-2 border-t border-slate-200/20">
+              <div className="flex-1 space-y-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider opacity-70">Cód. 10E</label>
+                <input 
+                  type="text" 
+                  value={newCode10e} 
+                  onChange={e => setNewCode10e(e.target.value)} 
+                  placeholder="Ej. 123" 
+                  className={cn(
+                    "w-full h-10 px-3 rounded-xl border text-sm font-bold",
+                    goldMode ? "bg-white/5 border-white/15 text-white" : "bg-slate-50 border-slate-300 text-black"
+                  )} 
+                />
+              </div>
+              <div className="w-24 space-y-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider opacity-70">Cajas</label>
+                <input 
+                  type="number" 
+                  value={newBoxes10e} 
+                  onChange={e => setNewBoxes10e(e.target.value)} 
+                  placeholder="0" 
+                  className={cn(
+                    "w-full h-10 px-3 rounded-xl border text-sm font-bold",
+                    goldMode ? "bg-white/5 border-white/15 text-white" : "bg-slate-50 border-slate-300 text-black"
+                  )} 
+                />
+              </div>
+              <button 
+                onClick={() => {
+                  if (newCode10e && newBoxes10e) {
+                    const cleanCode = newCode10e.replace(/^10[eE]/i, '');
+                    useProductionStore.getState().setNoblejasConfig(`10E${cleanCode}`, parseInt(newBoxes10e, 10));
+                    setNewCode10e("");
+                    setNewBoxes10e("");
+                  }
+                }}
+                disabled={!newCode10e || !newBoxes10e}
+                className={cn(
+                  "h-10 px-4 rounded-xl font-bold flex items-center justify-center transition-all",
+                  (!newCode10e || !newBoxes10e) ? "opacity-50 cursor-not-allowed bg-slate-200 text-slate-400" : (goldMode ? "bg-amber-500 text-black" : "bg-emerald-600 text-white")
+                )}
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Botón Peligro - Limpiar Base de Datos */}
+      <div className="flex justify-center pt-8 pb-4">
+        <button
+          onClick={() => setIsClearDBConfirmOpen(true)}
+          className={cn(
+            "flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all border shadow-sm hover:shadow-md",
+            goldMode 
+              ? "bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20" 
+              : "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"
+          )}
+        >
+          <Trash2 className="w-4 h-4" />
+          Limpiar toda la Base de Datos
+        </button>
+      </div>
+
+      {/* Modal: Confirmar Limpiar Todo */}
+      {isClearDBConfirmOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className={cn(
+            "relative w-full max-w-sm p-6 rounded-3xl border shadow-2xl flex flex-col gap-6 text-center items-center",
+            goldMode ? "bg-[#141006] border-red-500/30 text-white" : "bg-white border-red-600/20 text-[#0f291e]"
+          )}>
+            <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center">
+              <Database className="w-8 h-8" />
+            </div>
+            
+            <div>
+              <h3 className="text-xl font-black text-red-500 mb-2">¡Atención!</h3>
+              <p className="text-sm opacity-80 leading-relaxed">
+                Vas a eliminar de la base de datos <strong>TODAS las ensaladas de TODAS las líneas</strong>. Esto se usa para reiniciar el sistema al final del turno. Esta acción no se puede deshacer.
+              </p>
+            </div>
+
+            <div className="flex w-full gap-3 pt-2">
+              <button 
+                onClick={() => setIsClearDBConfirmOpen(false)}
+                className="flex-1 py-3 rounded-xl font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={async () => {
+                  setLoading(true);
+                  setIsClearDBConfirmOpen(false);
+                  await useProductionStore.getState().clearAllDatabase();
+                  await fetchOverview();
+                  setLoading(false);
+                }}
+                className="flex-1 py-3 rounded-xl font-bold bg-red-500 text-white hover:bg-red-600 transition-colors shadow-lg shadow-red-500/30"
+              >
+                Borrar Todo
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Toast Feedback */}
@@ -1456,6 +1811,17 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           </div>
         </div>
       )}
+
+      <ExcelUploader 
+        open={isExcelUploaderOpen} 
+        onOpenChange={setExcelUploaderOpen} 
+        goldMode={goldMode} 
+      />
+      <NoblejasUploader 
+        open={isNoblejasUploaderOpen} 
+        onOpenChange={setNoblejasUploaderOpen} 
+        goldMode={goldMode} 
+      />
     </div>
   );
 }

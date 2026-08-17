@@ -187,8 +187,16 @@ export function ProductionCard() {
             <span>Editar</span>
           </button>
         </p>
-        <h2 className="text-3xl md:text-4xl font-black text-white leading-tight">
-          {current.saladName}
+        <h2 className="text-3xl md:text-4xl font-black text-white leading-tight flex items-center justify-center gap-2 flex-wrap">
+          <span>{current.saladName}</span>
+          {current.codigo10e && (
+            <span className={cn(
+              "text-lg md:text-xl font-bold opacity-70 mt-1",
+              goldMode ? "text-amber-400" : "text-emerald-300"
+            )}>
+              {current.codigo10e}
+            </span>
+          )}
         </h2>
         {goldMode && current.note && (
           <div className="mt-2 mx-auto max-w-sm px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold flex items-center justify-center gap-1.5 animate-pulse">

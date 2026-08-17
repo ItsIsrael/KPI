@@ -142,20 +142,27 @@ export async function fetchLineData(lineId: string): Promise<{
       };
     }
 
-    const queue: QueueItem[] = queueRows.map((q) => ({
-      id: q.id,
-      saladId: q.salad_id,
-      saladName: q.salad_name,
-      formatId: q.format_id,
-      boxType: q.box_type,
-      quantity: q.quantity,
-      noblejas: q.noblejas || 0,
-      boxesPerPallet: q.boxes_per_pallet,
-      note: q.note || undefined,
-      lote: q.lote || undefined,
-      cambioLote: q.cambio_lote || false,
-      fechaCaducidad: q.fecha_caducidad || undefined,
-    }));
+    const queue: QueueItem[] = queueRows.map((q) => {
+      const nameMatch = q.salad_name?.match(/^\[(10[eE][a-zA-Z0-9]+)\]\s*(.*)$/);
+      const codigo10e = nameMatch ? nameMatch[1] : undefined;
+      const saladName = nameMatch ? nameMatch[2] : q.salad_name;
+
+      return {
+        id: q.id,
+        saladId: q.salad_id,
+        saladName: saladName,
+        formatId: q.format_id,
+        boxType: q.box_type,
+        quantity: q.quantity,
+        noblejas: q.noblejas || 0,
+        boxesPerPallet: q.boxes_per_pallet,
+        note: q.note || undefined,
+        lote: q.lote || undefined,
+        cambioLote: q.cambio_lote || false,
+        fechaCaducidad: q.fecha_caducidad || undefined,
+        codigo10e: codigo10e,
+      };
+    });
 
     // 3. Obtener progresos de los items
     const itemIds = queue.map((q) => q.id);
@@ -241,7 +248,7 @@ export async function syncQueueItems(lineId: string, queue: QueueItem[]) {
         line_id: lineId,
         order_index: index,
         salad_id: item.saladId,
-        salad_name: item.saladName,
+        salad_name: item.codigo10e ? `[${item.codigo10e}] ${item.saladName}` : item.saladName,
         format_id: item.formatId,
         box_type: item.boxType,
         quantity: item.quantity,
@@ -523,4 +530,64 @@ export function subscribeToGlobalChanges(onGlobalChange: () => void) {
   return () => {
     supabase?.removeChannel(channel);
   };
+}
+
+export async function clearAllQueuesAndLines(): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) return;
+  try {
+    // Esto borra todos los items de la cola (y en cascada queue_item_progress si está configurado)
+    await supabase.from("queue_item_progress").delete().not("queue_item_id", "is", null);
+    await supabase.from("line_queue_items").delete().not("id", "is", null);
+    // Reseteamos el estado de las líneas
+    await supabase.from("production_lines").update({ current_queue_index: 0, is_producing: false }).not("id", "is", null);
+  } catch (e) {
+    console.error("Error al limpiar base de datos:", e);
+  }
+}
+
+// ============================================================
+// 4. CONFIGURACIÓN GLOBAL (EXCEL PENDIENTE)
+// ============================================================
+
+export async function syncPendingExcelData(data: any[]): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) return;
+  try {
+    const { error } = await supabase
+      .from("global_settings")
+      .upsert({
+        id: "pending_excel",
+        value: data,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "id" });
+      
+    if (error) {
+      console.error("Error syncing pending excel data to Supabase:", error);
+    }
+  } catch (e) {
+    console.error("Exception syncing pending excel data:", e);
+  }
+}
+
+export async function fetchPendingExcelData(): Promise<any[]> {
+  if (!isSupabaseConfigured || !supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("global_settings")
+      .select("value")
+      .eq("id", "pending_excel")
+      .single();
+      
+    if (error && error.code !== 'PGRST116') { // No log error if just not found
+      console.warn("Error fetching pending excel data from Supabase:", error);
+      return [];
+    }
+    
+    if (data && data.value) {
+      return Array.isArray(data.value) ? data.value : [];
+    }
+    return [];
+  } catch (e) {
+    console.error("Exception fetching pending excel data:", e);
+    return [];
+  }
 }

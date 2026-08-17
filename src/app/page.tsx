@@ -36,7 +36,6 @@ export default function Home() {
     currentProgress,
     removeSalad,
     buildQueue,
-    resetProduction,
     showSplitView,
     iframeUrl,
     toggleSplitView,
@@ -77,6 +76,9 @@ export default function Home() {
 
   // Modal de colores de etiquetas semanales
   const [showLabelsModal, setShowLabelsModal] = useState(false);
+  
+  // Filtro de historial
+  const [historyFilter, setHistoryFilter] = useState("");
 
   // Estados para la pantalla de carga (evitar flash en hidratación)
   const [isLoading, setIsLoading] = useState(true);
@@ -330,11 +332,13 @@ export default function Home() {
         {/* Botón de emergencia */}
         <div className="pb-2">
           <Button
-            onClick={resetProduction}
+            onClick={() => {
+              clearQueueAndSalads();
+            }}
             className="w-full h-12 text-sm font-bold bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-400 hover:to-red-500 text-white shadow-lg shadow-red-500/20 rounded-xl transition-all active:scale-[0.98]"
             id="reset-production-btn"
           >
-            ⏹ Detener producción
+            🛑 Detener y Limpiar Línea
           </Button>
         </div>
       </div>
@@ -532,22 +536,40 @@ export default function Home() {
         {/* History */}
         {history && history.length > 0 && (
           <section className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 flex flex-col max-w-xl mx-auto w-full">
-            <div className="flex items-center justify-between mb-3 shrink-0">
-              <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider flex items-center gap-1.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 shrink-0 gap-2">
+              <h3 className="text-xs font-semibold text-white/40 uppercase tracking-wider flex items-center gap-1.5 shrink-0">
                 <History className="w-3.5 h-3.5" /> Historial Reciente ({history.length})
               </h3>
-              <button
-                onClick={clearHistory}
-                className="text-[10px] font-bold text-red-400/60 hover:text-red-400 hover:bg-red-500/10 px-2 py-0.5 rounded transition-all cursor-pointer"
-              >
-                Limpiar
-              </button>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Filtrar por ensalada o lote..."
+                  value={historyFilter}
+                  onChange={(e) => setHistoryFilter(e.target.value)}
+                  className="bg-white/5 border border-white/10 text-white text-xs rounded-lg px-2 py-1 w-full sm:w-40 focus:outline-none focus:border-emerald-500/50"
+                />
+                <button
+                  onClick={clearHistory}
+                  className="text-[10px] font-bold text-red-400/60 hover:text-red-400 hover:bg-red-500/10 px-2 py-1 rounded transition-all cursor-pointer shrink-0"
+                >
+                  Limpiar
+                </button>
+              </div>
             </div>
             <div className="space-y-1.5 max-h-[240px] overflow-y-auto pr-0.5">
-              {history.map((h) => (
+              {history
+                .filter((h) => h.saladName.toLowerCase().includes(historyFilter.toLowerCase()) || h.operator?.toLowerCase().includes(historyFilter.toLowerCase()))
+                .map((h) => (
                 <div key={h.id} className="flex items-center justify-between p-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-xs hover:bg-white/[0.04] transition-all">
                   <div className="min-w-0 flex-1 mr-2">
-                    <p className="font-bold text-white/80 truncate">{h.saladName}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-white/80 truncate">{h.saladName}</p>
+                      {false && h.operator && (
+                        <span className="text-[9px] px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-white/40 font-mono flex-shrink-0">
+                          {h.operator}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[10px] text-white/40 truncate">
                       {h.boxType} · {h.quantity}c {h.noblejas > 0 ? `· ${h.noblejas} Nob` : ""}
                     </p>

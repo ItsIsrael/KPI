@@ -8,6 +8,8 @@ import type {
   FormatProgress,
   HistoryItem,
   TemplateItem,
+  OrderRow,
+  ParsedExcelRow,
 } from "@/types/types";
 import { generateId, calculateFormat, DEFAULT_BOX_TYPES } from "@/types/types";
 
@@ -19,6 +21,8 @@ import {
   syncProgress, 
   saveHistoryLog,
   hardResetLine,
+  syncPendingExcelData,
+  fetchPendingExcelData,
 } from "@/lib/supabase-service";
 
 // Canal de sincronización local instantánea entre pestañas/monitores (<10ms)
@@ -113,6 +117,10 @@ interface ProductionState {
   // Multilínea
   activeLineCode: string; // 'K00' | 'K01' | 'K02' | 'K03' | 'ALL'
   activeLineId: string | null;
+  parsedExcelData: ParsedExcelRow[];
+  setParsedExcelData: (data: ParsedExcelRow[]) => void;
+  clearParsedExcelData: () => void;
+  // Acciones de Línea
   lineStorage: Record<string, {
     salads: Salad[];
     queue: QueueItem[];
@@ -120,9 +128,16 @@ interface ProductionState {
     currentProgress: FormatProgress | null;
     queueProgress: Record<string, FormatProgress>;
     isProducing: boolean;
+    manualOrderDrafts?: OrderRow[];
   }>;
   setActiveLineCode: (code: string) => Promise<void>;
   loadActiveLineData: () => Promise<void>;
+  loadAllLinesData: () => Promise<void>;
+  clearAllDatabase: () => Promise<void>;
+  noblejasConfig: Record<string, number>;
+  setNoblejasConfig: (codigo10e: string, boxes: number) => Promise<void>;
+  setNoblejasConfigBulk: (configs: Record<string, number>) => Promise<void>;
+  removeNoblejasConfig: (codigo10e: string) => void;
 
   // Datos
   salads: Salad[];
@@ -148,6 +163,7 @@ interface ProductionState {
   ambientMode: boolean; // Modo Ambiente a pantalla completa
   editingQueueItemId: string | null; // ID del elemento de la cola en edición
   isLoggedIn: boolean; // Estado de autenticación
+  currentUser: string | null; // Operador actual
   customDayLabelIndex: number | null; // Selector manual de día / color de etiqueta (Gold / Planta)
   isScreenLocked: boolean; // Modo Bloqueo Táctil de Pantalla (Glove-lock)
   login: (username: string, password: string) => boolean;
@@ -164,6 +180,10 @@ interface ProductionState {
   buildQueue: () => void;
   reorderQueue: (fromIndex: number, toIndex: number) => void;
   removeFromQueue: (index: number) => void;
+  multiLineReorderQueue: (lineCode: string, fromIndex: number, toIndex: number) => void;
+  multiLineRemoveFromQueue: (lineCode: string, index: number) => void;
+  multiLineClearQueueAndSalads: (lineCode: string) => void;
+  updateManualOrderDrafts: (lineCode: string, drafts: OrderRow[]) => void;
 
   // ===== ACCIONES: PRODUCCIÓN =====
   startProduction: () => void;
@@ -376,7 +396,158 @@ export const useProductionStore = create<ProductionState>()(
         }
       },
 
+      loadAllLinesData: async () => {
+        const { isSupabaseConfigured } = await import("@/lib/supabase");
+        if (!isSupabaseConfigured) return;
+        
+        try {
+          const lines = await getProductionLines();
+          const newLineStorage: Record<string, any> = {};
+          
+          for (const line of lines) {
+            const data = await fetchLineData(line.id);
+            const lineCode = line.code;
+            
+            if (data.queue && data.queue.length > 0) {
+              const currentQueueItem = data.queue[data.currentQueueIndex];
+              const prog = currentQueueItem
+                ? data.queueProgress[currentQueueItem.id] || createInitialProgress(currentQueueItem.id)
+                : null;
+
+              const saladMap = new Map<string, Salad>();
+              data.queue.forEach((q) => {
+                if (!saladMap.has(q.saladId)) {
+                  saladMap.set(q.saladId, {
+                    id: q.saladId,
+                    name: q.saladName,
+                    formats: [],
+                  });
+                }
+                saladMap.get(q.saladId)!.formats.push({
+                  id: q.formatId,
+                  boxType: q.boxType,
+                  quantity: q.quantity,
+                  noblejas: q.noblejas,
+                  boxesPerPallet: q.boxesPerPallet,
+                  note: q.note,
+                  lote: q.lote,
+                  cambioLote: q.cambioLote,
+                  fechaCaducidad: q.fechaCaducidad,
+                  codigo10e: q.codigo10e,
+                  linea: q.linea,
+                });
+              });
+
+              newLineStorage[lineCode] = {
+                queue: data.queue,
+                salads: Array.from(saladMap.values()),
+                queueProgress: data.queueProgress,
+                currentQueueIndex: data.currentQueueIndex,
+                isProducing: data.isProducing,
+                currentProgress: prog,
+              };
+            } else {
+              newLineStorage[lineCode] = {
+                queue: [],
+                salads: [],
+                queueProgress: {},
+                currentQueueIndex: 0,
+                isProducing: false,
+                currentProgress: null,
+              };
+            }
+          }
+          
+          // Hydrate pending Excel data from Supabase
+          const remotePendingExcel = await fetchPendingExcelData();
+          
+          set((s) => {
+            if (remotePendingExcel && remotePendingExcel.length > 0) {
+              return {
+                lineStorage: { ...s.lineStorage, ...newLineStorage },
+                parsedExcelData: remotePendingExcel
+              };
+            }
+            return {
+              lineStorage: { ...s.lineStorage, ...newLineStorage }
+            };
+          });
+        } catch (e) {
+          console.error("Error loading all lines data:", e);
+        }
+      },
+
+      // Configuración de Noblejas
+      noblejasConfig: {},
+      setNoblejasConfig: async (codigo10e, boxes) => {
+        const state = get();
+        await state.setNoblejasConfigBulk({ [codigo10e]: boxes });
+      },
+      setNoblejasConfigBulk: async (configs) => {
+        const state = get();
+        const newNoblejasConfig = { ...state.noblejasConfig, ...configs };
+        
+        const newLineStorage = { ...state.lineStorage };
+        const linesToSync: string[] = [];
+
+        for (const [lineCode, lineData] of Object.entries(newLineStorage)) {
+          let lineUpdated = false;
+          const newQueue = lineData.queue.map(item => {
+            if (item.codigo10e && configs[item.codigo10e] !== undefined) {
+              lineUpdated = true;
+              return { ...item, noblejas: configs[item.codigo10e] };
+            }
+            return item;
+          });
+
+          if (lineUpdated) {
+            newLineStorage[lineCode] = { ...lineData, queue: newQueue };
+            linesToSync.push(lineCode);
+          }
+        }
+
+        set({
+          noblejasConfig: newNoblejasConfig,
+          lineStorage: newLineStorage,
+        });
+
+        const { syncQueueItems, getProductionLines } = await import("@/lib/supabase-service");
+        
+        if (linesToSync.length > 0) {
+          const lines = await getProductionLines();
+          for (const code of linesToSync) {
+            const dbLine = lines.find(l => l.code === code);
+            if (dbLine) {
+              await syncQueueItems(dbLine.id, newLineStorage[code].queue);
+            }
+          }
+        }
+
+        // Si hay una línea activa (no 'ALL'), actualizar también su queue y salads en el estado top-level
+        if (state.activeLineCode && state.activeLineCode !== "ALL" && linesToSync.includes(state.activeLineCode)) {
+           const activeStorage = newLineStorage[state.activeLineCode];
+           set({
+             queue: activeStorage.queue,
+             salads: activeStorage.salads
+           });
+        }
+      },
+      removeNoblejasConfig: (codigo10e) => set((s) => {
+        const newConfig = { ...s.noblejasConfig };
+        delete newConfig[codigo10e];
+        return { noblejasConfig: newConfig };
+      }),
+
       // Estado inicial
+      parsedExcelData: [],
+      setParsedExcelData: (data) => {
+        set({ parsedExcelData: data });
+        syncPendingExcelData(data); // Sync en segundo plano
+      },
+      clearParsedExcelData: () => {
+        set({ parsedExcelData: [] });
+        syncPendingExcelData([]); // Borrar de Supabase también
+      },
       salads: [],
       queue: [],
       currentQueueIndex: 0,
@@ -400,6 +571,7 @@ export const useProductionStore = create<ProductionState>()(
       templates: [],
       editingQueueItemId: null,
       isLoggedIn: true,
+      currentUser: null,
       customDayLabelIndex: null,
       isScreenLocked: false,
 
@@ -429,6 +601,7 @@ export const useProductionStore = create<ProductionState>()(
           note: format.note,
           lote: format.lote,
           cambioLote: format.cambioLote,
+          codigo10e: format.codigo10e,
           fechaCaducidad: format.fechaCaducidad,
           linea: lineCodeToUse,
         }));
@@ -675,6 +848,96 @@ export const useProductionStore = create<ProductionState>()(
           }
           return { queue: newQueue };
         }),
+
+      multiLineReorderQueue: async (lineCode, fromIndex, toIndex) => {
+        const state = get();
+        const lineState = state.lineStorage[lineCode];
+        if (!lineState) return;
+
+        const newQueue = [...lineState.queue];
+        const [moved] = newQueue.splice(fromIndex, 1);
+        newQueue.splice(toIndex, 0, moved);
+
+        set((s) => ({
+          lineStorage: {
+            ...s.lineStorage,
+            [lineCode]: {
+              ...lineState,
+              queue: newQueue,
+            },
+          },
+        }));
+
+        const lines = await getProductionLines();
+        const line = lines.find((l) => l.code === lineCode);
+        if (line) {
+          await syncQueueItems(line.id, newQueue);
+        }
+        broadcastLocalChange(lineCode);
+      },
+
+      multiLineRemoveFromQueue: async (lineCode, index) => {
+        const state = get();
+        const lineState = state.lineStorage[lineCode];
+        if (!lineState) return;
+
+        const newQueue = lineState.queue.filter((_, i) => i !== index);
+
+        set((s) => ({
+          lineStorage: {
+            ...s.lineStorage,
+            [lineCode]: {
+              ...lineState,
+              queue: newQueue,
+            },
+          },
+        }));
+
+        const lines = await getProductionLines();
+        const line = lines.find((l) => l.code === lineCode);
+        if (line) {
+          await syncQueueItems(line.id, newQueue);
+        }
+        broadcastLocalChange(lineCode);
+      },
+
+      multiLineClearQueueAndSalads: async (lineCode) => {
+        const state = get();
+        const lines = await getProductionLines();
+        const line = lines.find((l) => l.code === lineCode);
+
+        if (line) {
+          await syncLineState(line.id, false, 0);
+          await syncQueueItems(line.id, []);
+        }
+
+        set((s) => ({
+          lineStorage: {
+            ...s.lineStorage,
+            [lineCode]: {
+              salads: [],
+              queue: [],
+              isProducing: false,
+              currentQueueIndex: 0,
+              currentProgress: null,
+              queueProgress: {},
+            },
+          },
+        }));
+        broadcastLocalChange(lineCode);
+      },
+
+      updateManualOrderDrafts: (lineCode, drafts) => {
+        set((s) => ({
+          lineStorage: {
+            ...s.lineStorage,
+            [lineCode]: {
+              ...(s.lineStorage[lineCode] || ({} as any)),
+              manualOrderDrafts: drafts,
+            },
+          },
+        }));
+      },
 
       // ===== PRODUCCIÓN =====
 
@@ -994,6 +1257,7 @@ export const useProductionStore = create<ProductionState>()(
           quantity: completedFormat.quantity,
           noblejas: completedFormat.noblejas,
           boxesPerPallet: completedFormat.boxesPerPallet,
+          operator: get().currentUser || undefined,
           date: new Date().toLocaleTimeString("es-ES", {
             hour: "2-digit",
             minute: "2-digit",
@@ -1195,6 +1459,30 @@ export const useProductionStore = create<ProductionState>()(
           templates: [],
         }),
 
+      clearAllDatabase: async () => {
+        const { clearAllQueuesAndLines } = await import("@/lib/supabase-service");
+        await clearAllQueuesAndLines();
+        // Reset all lineStorage and current line
+        const emptyState = {
+          salads: [],
+          queue: [],
+          currentQueueIndex: 0,
+          currentProgress: null,
+          queueProgress: {},
+          isProducing: false,
+        };
+        set((s) => {
+          const resetStorage: Record<string, any> = {};
+          Object.keys(s.lineStorage).forEach(code => {
+            resetStorage[code] = { ...emptyState };
+          });
+          return {
+            ...emptyState,
+            lineStorage: resetStorage
+          };
+        });
+      },
+
       hardResetDatabase: async () => {
         const { activeLineId, activeLineCode } = get();
         if (activeLineId) {
@@ -1355,12 +1643,12 @@ export const useProductionStore = create<ProductionState>()(
         set({ editingQueueItemId: id }),
 
       login: (_username, _password) => {
-        set({ isLoggedIn: true });
+        set({ isLoggedIn: true, currentUser: _username });
         return true;
       },
 
       logout: () =>
-        set({ isLoggedIn: true }),
+        set({ isLoggedIn: false, currentUser: null }),
 
       updateQueueItem: async (id, updates) => {
         const state = get();

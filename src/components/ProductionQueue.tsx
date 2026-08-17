@@ -182,28 +182,28 @@ export function ProductionQueue({ editable = false }: ProductionQueueProps) {
                 >
                   {/* Flechas de reordenación */}
                   {editable && (!isProducing || isPending) && (
-                    <div className="flex flex-col gap-0.5" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex flex-col gap-1 mr-1" onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
                         onClick={() => moveUp(index)}
                         disabled={index <= (isProducing ? currentQueueIndex + 1 : 0)}
                         className={cn(
-                          "p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-colors cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
+                          "p-2 sm:p-3 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition-colors cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
                         )}
                         title="Subir"
                       >
-                        <ChevronUp className="w-5 h-5" />
+                        <ChevronUp className="w-6 h-6 sm:w-7 sm:h-7" />
                       </button>
                       <button
                         type="button"
                         onClick={() => moveDown(index)}
                         disabled={index >= queue.length - 1}
                         className={cn(
-                          "p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-colors cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
+                          "p-2 sm:p-3 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition-colors cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
                         )}
                         title="Bajar"
                       >
-                        <ChevronDown className="w-5 h-5" />
+                        <ChevronDown className="w-6 h-6 sm:w-7 sm:h-7" />
                       </button>
                     </div>
                   )}
@@ -246,6 +246,16 @@ export function ProductionQueue({ editable = false }: ProductionQueueProps) {
                       >
                         📦 {item.boxType}
                       </span>
+                      {item.codigo10e && (
+                        <span className={cn(
+                          "ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1",
+                          item.noblejas > 0 
+                            ? "bg-purple-500/10 text-purple-400 border border-purple-500/20" 
+                            : "bg-white/5 text-white/40 border border-white/10"
+                        )}>
+                          🏷️ {item.codigo10e} {item.noblejas > 0 && "· 💜 Noblejas"}
+                        </span>
+                      )}
                     </p>
                     <p className="text-xs text-white/30 mt-0.5 flex items-center gap-1.5 flex-wrap">
                       <span>
@@ -291,7 +301,11 @@ export function ProductionQueue({ editable = false }: ProductionQueueProps) {
                       {(!isProducing || isPending) && (
                         <button
                           type="button"
-                          onClick={() => removeFromQueue(index)}
+                          onClick={() => {
+                            if (window.confirm("¿Seguro que deseas eliminar este formato de la cola?")) {
+                              removeFromQueue(index);
+                            }
+                          }}
                           className="h-8 w-8 flex items-center justify-center text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
                           id={`queue-remove-${index}`}
                           title="Eliminar"

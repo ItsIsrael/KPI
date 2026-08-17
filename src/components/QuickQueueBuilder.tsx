@@ -26,11 +26,11 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
     }
   }, [activeLineCode]);
 
-  const [saladName, setSaladName] = useState<string>("César");
+  const [saladName, setSaladName] = useState<string>("");
   const [selectedBoxType, setSelectedBoxType] = useState<string>("Cartón 6");
   const [quantity, setQuantity] = useState<string>("");
-  const [noblejasPallets, setNoblejasPallets] = useState<string>("0");
-  const [noblejasCajas, setNoblejasCajas] = useState<string>("0");
+  const [noblejasPallets, setNoblejasPallets] = useState<string>("");
+  const [noblejasCajas, setNoblejasCajas] = useState<string>("");
   const [boxesPerPallet, setBoxesPerPallet] = useState<number>(DEFAULT_BOX_TYPES[0].defaultBoxesPerPallet);
   const [lote, setLote] = useState<string>("");
   const [fechaCaducidad, setFechaCaducidad] = useState<string>("");
@@ -128,8 +128,8 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
   };
 
   const handleResetNoblejas = () => {
-    setNoblejasPallets("0");
-    setNoblejasCajas("0");
+    setNoblejasPallets("");
+    setNoblejasCajas("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -162,6 +162,7 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
       cambioLote: false,
       fechaCaducidad: fechaCaducidad.trim() || undefined,
       linea: selectedLine,
+      createdAt: Date.now(),
     };
 
     const newSalad: Salad = {
@@ -179,8 +180,8 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
 
     // Resetear formulario para entrada rápida continua
     setQuantity("");
-    setNoblejasPallets("0");
-    setNoblejasCajas("0");
+    setNoblejasPallets("");
+    setNoblejasCajas("");
     setLote("");
     setFechaCaducidad("");
     setNote("");
@@ -285,7 +286,7 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
             type="text"
             value={saladName}
             onChange={(e) => setSaladName(e.target.value)}
-            placeholder="O escribe otro nombre (ej. Gourmet Promo, Mezclum 200g)..."
+            placeholder="Ej: ¿Qué ensalada vamos a hacer?"
             className={cn(
               "w-full h-11 px-3.5 rounded-xl border text-sm transition-all font-medium",
               goldMode
@@ -417,7 +418,7 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
                     type="number"
                     min="0"
                     max={maxNoblejasPallets}
-                    value={noblejasPallets}
+                    value={noblejasPallets === "" ? "" : noblejasPallets}
                     onChange={(e) => handleNoblejasPalletsChange(e.target.value)}
                     placeholder="0"
                     className={cn(
@@ -455,7 +456,7 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
                     type="number"
                     min="0"
                     max={Math.max(0, numQuantity - numNobPallets * boxesPerPallet)}
-                    value={noblejasCajas}
+                    value={noblejasCajas === "" ? "" : noblejasCajas}
                     onChange={(e) => handleNoblejasCajasChange(e.target.value)}
                     placeholder="0"
                     className={cn(

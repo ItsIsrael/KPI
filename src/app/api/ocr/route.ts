@@ -35,14 +35,22 @@ export async function POST(req: Request) {
       messages: [
         {
           role: "system",
-          content: `Eres un experto planificador de producción industrial. Tu tarea es analizar una foto de una hoja de planificación de fábrica (Órdenes de Fabricación - OF) y extraer estructuradamente las ensaladas a producir y sus respectivos formatos (tipos de caja, cantidades, lotes).
+          content: `Eres un experto planificador de producción industrial. Tu tarea es analizar una foto de una hoja de planificación de fábrica (una fotocopia de un Excel con Órdenes de Fabricación) y extraer estructuradamente las ensaladas a producir y sus respectivos formatos (tipos de caja, cantidades, lotes).
 
-Reglas críticas de identificación de códigos internos:
-1. Códigos de Ensaladas (Empiezan por "10d"): Por ejemplo, "10d477" corresponde a "César". Extrae el nombre de la ensalada del texto cercano.
-2. Códigos de Formato/Caja (Empiezan por "10e"): Este es el formato de la caja. Relaciónalo con un nombre legible (ej. "Cartón 4", "Cartón 6", "Plástico").
-3. Cantidades: Identifica la cantidad de cajas a producir de cada formato. Si no es legible, pon 0.
-4. Noblejas: Si ves una cantidad separada para "Noblejas", anótala. Si no, pon 0.
-5. Lote: Si encuentras un lote de producción, anótalo. Si hay un lote, asume cambioLote: true.
+Ten en cuenta que la tabla de la fotocopia tiene típicamente esta estructura de columnas, de izquierda a derecha:
+1. Código 10d (Código interno de la ensalada, ej. 10d477)
+2. Código 10E (Código interno del formato/caja, ej. 10E123)
+3. Nombre de la Ensalada (Ej. "César", "Pasta", etc.)
+4. Cantidad (Número total de cajas a producir)
+5. Tipo de caja (Ej. "Cartón 4", "Cartón 6", "Plástico")
+6. Línea de producción (Ej. "Mondini 00", "K01", "K03", etc.) si se indica en la hoja.
+
+Reglas de extracción:
+1. Asocia correctamente cada "Nombre de la Ensalada" con su "Cantidad" y "Tipo de caja" correspondientes leyendo la fila de izquierda a derecha. Fíjate muy bien que el tipo de caja suele venir pegado al nombre de la ensalada.
+2. Extrae el código "10E" si aparece en la misma fila y guárdalo en "codigo10e" siempre en mayúsculas (ej. "10E123"). Si no hay, déjalo vacío o no lo incluyas.
+3. Si ves menciones a "Noblejas" separadas o como columnas adicionales, anota la cantidad. Si no, pon 0.
+4. Si encuentras un lote de producción (ej. L-1234), anótalo. Si hay un lote, asume cambioLote: true.
+5. Identifica la línea de producción a la que corresponde la orden si aparece especificada (ej. Mondini 00, K01, K03) y asígnala al campo "linea".
 
 Devuelve EXACTAMENTE Y ÚNICAMENTE un objeto JSON válido con la siguiente estructura estricta:
 {
@@ -56,14 +64,16 @@ Devuelve EXACTAMENTE Y ÚNICAMENTE un objeto JSON válido con la siguiente estru
           "noblejas": 0,
           "boxesPerPallet": 80,
           "lote": "L-1234A",
-          "cambioLote": true
+          "cambioLote": true,
+          "linea": "K01",
+          "codigo10e": "10E123"
         }
       ]
     }
   ]
 }
 
-Asegúrate de que 'boxesPerPallet' tenga un valor por defecto realista (ej. 70 o 80) si no aparece explícitamente.`
+Asegúrate de que 'boxesPerPallet' tenga un valor por defecto realista (ej. 70 o 80) dependiendo del tipo de caja, si no aparece explícitamente.`
         },
         {
           role: "user",
