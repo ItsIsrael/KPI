@@ -75,13 +75,16 @@ export function VersionNotifier({ goldMode = false }: VersionNotifierProps) {
             <Sparkles className="w-5 h-5 animate-pulse" />
           </div>
           <div className="min-w-0">
-            <h4 className="text-xs sm:text-sm font-black tracking-tight leading-snug text-white flex items-center gap-1.5 drop-shadow-sm">
+            <h4 
+              style={{ color: '#ffffff' }}
+              className="text-xs sm:text-sm font-black tracking-tight leading-snug !text-white flex items-center gap-1.5 drop-shadow-md"
+            >
               <span>¡Nueva versión disponible!</span>
             </h4>
-            <p className={cn(
-              "text-[11px] font-semibold leading-snug mt-0.5",
-              goldMode ? "text-amber-200/90" : "text-emerald-100/90"
-            )}>
+            <p 
+              style={{ color: '#f8fafc' }}
+              className="text-[11px] font-semibold leading-snug mt-0.5 !text-slate-100"
+            >
               Mejoras listas. Tus datos no se perderán.
             </p>
           </div>

@@ -71,7 +71,9 @@ import {
   Settings,
   SkipForward,
   Minus,
-  Megaphone
+  Megaphone,
+  ChevronLeft,
+  ArrowUpDown
 } from "lucide-react";
 import { ManualOrderScanner } from "@/components/ManualOrderScanner";
 import { ExcelUploader } from "@/components/ExcelUploader";
@@ -108,15 +110,47 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      localStorage.setItem("dashboardViewMode", viewMode);
-    }
-  }, [viewMode]);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
       localStorage.setItem("dashboardCustomLines", JSON.stringify(customSelectedLines));
     }
   }, [customSelectedLines]);
+
+  const [lineOrder, setLineOrder] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("dashboardLineOrder");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch {}
+      }
+    }
+    return ["K00", "K01", "K02", "K03"];
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("dashboardLineOrder", JSON.stringify(lineOrder));
+    }
+  }, [lineOrder]);
+
+  const handleMoveLine = (lineCode: string, direction: "left" | "right", e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLineOrder((prev) => {
+      const currentList = [...prev];
+      // Asegurarse de que todas las líneas existan
+      ["K00", "K01", "K02", "K03"].forEach((c) => {
+        if (!currentList.includes(c)) currentList.push(c);
+      });
+      const idx = currentList.indexOf(lineCode);
+      if (idx === -1) return prev;
+      const targetIdx = direction === "left" ? idx - 1 : idx + 1;
+      if (targetIdx < 0 || targetIdx >= currentList.length) return prev;
+      const temp = currentList[idx];
+      currentList[idx] = currentList[targetIdx];
+      currentList[targetIdx] = temp;
+      return currentList;
+    });
+  };
   const [connectionTest, setConnectionTest] = useState<SupabaseTestResult | null>(null);
   const [isClearDBConfirmOpen, setIsClearDBConfirmOpen] = useState(false);
   const [openSettingsLineCode, setOpenSettingsLineCode] = useState<string | null>(null);
@@ -694,13 +728,19 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
   const totalCompletedPlant = overview.reduce((acc, o) => acc + o.completedBoxes, 0);
   const activeLinesCount = overview.filter((o) => o.line.isProducing && o.queueLength > 0).length;
 
-  const displayedLines = overview.filter((item) => {
-    if (viewMode === "ALL") return true;
-    if (viewMode === "PAIR_01") return item.line.code === "K00" || item.line.code === "K01";
-    if (viewMode === "PAIR_23") return item.line.code === "K02" || item.line.code === "K03";
-    if (viewMode === "CUSTOM") return customSelectedLines.includes(item.line.code);
-    return true;
-  });
+  const displayedLines = overview
+    .filter((item) => {
+      if (viewMode === "ALL") return true;
+      if (viewMode === "PAIR_01") return item.line.code === "K00" || item.line.code === "K01";
+      if (viewMode === "PAIR_23") return item.line.code === "K02" || item.line.code === "K03";
+      if (viewMode === "CUSTOM") return customSelectedLines.includes(item.line.code);
+      return true;
+    })
+    .sort((a, b) => {
+      const idxA = lineOrder.indexOf(a.line.code);
+      const idxB = lineOrder.indexOf(b.line.code);
+      return (idxA !== -1 ? idxA : 99) - (idxB !== -1 ? idxB : 99);
+    });
 
   const isDuoView = viewMode === "PAIR_01" || viewMode === "PAIR_23" || (viewMode === "CUSTOM" && displayedLines.length <= 2);
 
@@ -912,41 +952,58 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
             </button>
           </div>
 
-          {viewMode === "CUSTOM" && (
-            <div className={cn(
-              "flex items-center gap-1.5 border rounded-xl p-1",
-              goldMode ? "bg-black/50 border-white/10" : "bg-emerald-50/70 border-emerald-600/15"
-            )}>
-              {(["K00", "K01", "K02", "K03"] as const).map((code) => {
-                const selected = customSelectedLines.includes(code);
-                return (
-                  <button
-                    key={code}
-                    onClick={() => {
-                      if (selected && customSelectedLines.length > 1) {
-                        setCustomSelectedLines(customSelectedLines.filter((c) => c !== code));
-                      } else if (!selected) {
-                        setCustomSelectedLines([...customSelectedLines, code]);
-                      }
-                    }}
-                    className={cn(
-                      "px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer",
-                      selected
-                        ? goldMode
-                          ? "bg-white/20 text-white border border-white/30"
-                          : "bg-emerald-600 text-white shadow-sm"
-                        : goldMode
-                        ? "text-white/30 hover:text-white hover:bg-white/5"
-                        : "text-[#64748b] hover:text-[#0f291e] hover:bg-white"
-                    )}
-                    type="button"
-                  >
-                    {code}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {JSON.stringify(lineOrder) !== JSON.stringify(["K00", "K01", "K02", "K03"]) && (
+              <button
+                onClick={() => setLineOrder(["K00", "K01", "K02", "K03"])}
+                className={cn(
+                  "text-[10px] font-bold px-2 py-1 rounded-lg border transition-all active:scale-95 cursor-pointer flex items-center gap-1",
+                  goldMode ? "border-white/10 bg-white/5 text-amber-300 hover:bg-white/10" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                )}
+                title="Restablecer orden predeterminado (K00, K01, K02, K03)"
+                type="button"
+              >
+                <ArrowUpDown className="w-3 h-3" />
+                <span>Restablecer Orden</span>
+              </button>
+            )}
+
+            {viewMode === "CUSTOM" && (
+              <div className={cn(
+                "flex items-center gap-1.5 border rounded-xl p-1",
+                goldMode ? "bg-black/50 border-white/10" : "bg-emerald-50/70 border-emerald-600/15"
+              )}>
+                {(["K00", "K01", "K02", "K03"] as const).map((code) => {
+                  const selected = customSelectedLines.includes(code);
+                  return (
+                    <button
+                      key={code}
+                      onClick={() => {
+                        if (selected && customSelectedLines.length > 1) {
+                          setCustomSelectedLines(customSelectedLines.filter((c) => c !== code));
+                        } else if (!selected) {
+                          setCustomSelectedLines([...customSelectedLines, code]);
+                        }
+                      }}
+                      className={cn(
+                        "px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer",
+                        selected
+                          ? goldMode
+                            ? "bg-white/20 text-white border border-white/30"
+                            : "bg-emerald-600 text-white shadow-sm"
+                          : goldMode
+                          ? "text-white/30 hover:text-white hover:bg-white/5"
+                          : "text-[#64748b] hover:text-[#0f291e] hover:bg-white"
+                      )}
+                      type="button"
+                    >
+                      {code}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1085,8 +1142,33 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                   </div>
                 </div>
 
-                {/* Badge Reactivo Automático (Sin doble punto y sin acción manual forzada) */}
-                <div className="flex items-center gap-2">
+                {/* Badge Reactivo Automático y Controles de Ordenación */}
+                <div className="flex items-center gap-1.5">
+                  {/* Botones de Reordenación (Persistentes por máquina) */}
+                  <div className="flex items-center bg-black/5 dark:bg-white/5 p-0.5 rounded-xl border border-black/5 dark:border-white/5">
+                    <button
+                      onClick={(e) => handleMoveLine(item.line.code, "left", e)}
+                      title={`Mover Línea ${item.line.code} a la izquierda / antes`}
+                      type="button"
+                      className={cn(
+                        "h-7 w-7 rounded-lg flex items-center justify-center cursor-pointer transition-all active:scale-90 hover:bg-black/10 dark:hover:bg-white/10",
+                        goldMode ? "text-amber-300" : "text-emerald-700"
+                      )}
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={(e) => handleMoveLine(item.line.code, "right", e)}
+                      title={`Mover Línea ${item.line.code} a la derecha / después`}
+                      type="button"
+                      className={cn(
+                        "h-7 w-7 rounded-lg flex items-center justify-center cursor-pointer transition-all active:scale-90 hover:bg-black/10 dark:hover:bg-white/10",
+                        goldMode ? "text-amber-300" : "text-emerald-700"
+                      )}
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
 
                   <div className="relative">
                     <button
