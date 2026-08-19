@@ -59,27 +59,30 @@ export function VersionNotifier({ goldMode = false }: VersionNotifierProps) {
     <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-[95%] max-w-lg animate-slide-down">
       <div
         className={cn(
-          "p-4 rounded-2xl shadow-2xl border flex items-center justify-between gap-3 backdrop-blur-xl transition-all",
+          "p-4 rounded-2xl shadow-2xl border flex items-center justify-between gap-3 backdrop-blur-2xl transition-all",
           goldMode
-            ? "bg-[#161208]/95 border-amber-400 text-white shadow-[0_10px_40px_rgba(245,158,11,0.25)] ring-2 ring-amber-400/40"
-            : "bg-emerald-950/95 border-emerald-400 text-white shadow-[0_10px_40px_rgba(16,185,129,0.25)] ring-2 ring-emerald-400/40"
+            ? "bg-[#181206]/98 border-amber-400 text-white shadow-[0_10px_40px_rgba(245,158,11,0.35)] ring-2 ring-amber-400/50"
+            : "bg-[#042416]/98 border-emerald-400 text-white shadow-[0_10px_40px_rgba(16,185,129,0.35)] ring-2 ring-emerald-400/50"
         )}
       >
         <div className="flex items-center gap-3 min-w-0">
           <div
             className={cn(
-              "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 animate-bounce",
-              goldMode ? "bg-amber-400/20 text-amber-300" : "bg-emerald-400/20 text-emerald-300"
+              "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-inner",
+              goldMode ? "bg-amber-400/20 text-amber-300 border border-amber-400/30" : "bg-emerald-400/20 text-emerald-300 border border-emerald-400/30"
             )}
           >
-            <Sparkles className="w-5 h-5" />
+            <Sparkles className="w-5 h-5 animate-pulse" />
           </div>
           <div className="min-w-0">
-            <h4 className="text-xs sm:text-sm font-black tracking-tight leading-snug flex items-center gap-1.5">
-              <span>¡Nueva versión del sistema disponible!</span>
+            <h4 className="text-xs sm:text-sm font-black tracking-tight leading-snug text-white flex items-center gap-1.5 drop-shadow-sm">
+              <span>¡Nueva versión disponible!</span>
             </h4>
-            <p className="text-[11px] opacity-80 leading-snug">
-              Hay mejoras listas. Los datos en curso no se perderán.
+            <p className={cn(
+              "text-[11px] font-semibold leading-snug mt-0.5",
+              goldMode ? "text-amber-200/90" : "text-emerald-100/90"
+            )}>
+              Mejoras listas. Tus datos no se perderán.
             </p>
           </div>
         </div>
@@ -90,10 +93,10 @@ export function VersionNotifier({ goldMode = false }: VersionNotifierProps) {
             disabled={isUpdating}
             type="button"
             className={cn(
-              "px-3.5 py-2 rounded-xl text-xs font-black transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-md",
+              "px-3.5 py-2 rounded-xl text-xs font-black transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-lg",
               goldMode
-                ? "bg-gradient-to-r from-amber-400 to-yellow-400 text-black hover:opacity-90"
-                : "bg-gradient-to-r from-emerald-400 to-teal-400 text-[#092015] hover:opacity-90"
+                ? "bg-gradient-to-r from-amber-400 to-yellow-400 text-black hover:brightness-110 shadow-amber-500/30"
+                : "bg-gradient-to-r from-emerald-400 to-teal-400 text-[#042416] hover:brightness-110 shadow-emerald-500/30"
             )}
           >
             <RefreshCw className={cn("w-3.5 h-3.5", isUpdating && "animate-spin")} />
@@ -101,7 +104,7 @@ export function VersionNotifier({ goldMode = false }: VersionNotifierProps) {
           </button>
           <button
             onClick={() => setDismissed(true)}
-            className="p-1.5 rounded-lg opacity-60 hover:opacity-100 hover:bg-white/10 transition-colors cursor-pointer text-white"
+            className="p-1.5 rounded-lg opacity-70 hover:opacity-100 hover:bg-white/10 transition-colors cursor-pointer text-white"
             title="Descartar por ahora"
             type="button"
           >
