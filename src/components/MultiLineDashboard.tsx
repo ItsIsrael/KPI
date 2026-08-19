@@ -941,15 +941,15 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           const isFinished = hasActiveOrders && (item.percent >= 100 || prog.finished);
           const isProducing = item.line.isProducing && hasActiveOrders && !isFinished;
 
-          // === DETECCIÓN DE ANOMALÍA (ritmo histórico + IA) ===
+          // === DETECCIÓN DE ANOMALÍA (ritmo de fábrica con tolerancia de 12 min base + IA) ===
           const now = Date.now();
           const lastUpdated = prog.palletLastUpdated || prog.lastPalletTimestamp || 0;
           const minutesSinceLastPallet = lastUpdated > 0 ? Math.floor((now - lastUpdated) / 60000) : 0;
-          const estimatedPalletMinutes = prog.lastPalletIntervalMs ? Math.round(prog.lastPalletIntervalMs / 60000) : 0;
+          const estimatedPalletMinutes = prog.lastPalletIntervalMs ? Math.round(prog.lastPalletIntervalMs / 60000) : 15;
 
-          // Thresholds dinámicos según ritmo real o fallback de 5 min
-          const warningThreshold = estimatedPalletMinutes > 0 ? estimatedPalletMinutes * 1.5 : 8;
-          const criticalThreshold = estimatedPalletMinutes > 0 ? estimatedPalletMinutes * 2.2 : 15;
+          // Thresholds adaptados: el operario tarda ~15 min por palet, tolerancia base a partir de 12 min
+          const warningThreshold = Math.max(12, Math.round(estimatedPalletMinutes * 1.15));
+          const criticalThreshold = Math.max(18, Math.round(estimatedPalletMinutes * 1.6));
 
           const isDelayWarning = isProducing && minutesSinceLastPallet >= warningThreshold;
           const isDelayCritical = isProducing && minutesSinceLastPallet >= criticalThreshold;
@@ -958,7 +958,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           // Disparar IA solo si: es crítico, tenemos historial y no hemos alertado en los últimos 10 min
           const existingAlert = aiAlerts[item.line.code];
           const aiCooldownOk = !existingAlert || (now - existingAlert.firedAt) > 10 * 60 * 1000;
-          if (isDelayCritical && estimatedPalletMinutes > 0 && aiCooldownOk) {
+          if (isDelayCritical && aiCooldownOk) {
             // Lanzar llamada IA (fuera del render, async)
             const lineCode = item.line.code;
             const saladName = item.currentSaladName || "Ensalada";
@@ -1002,9 +1002,13 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
             >
               {/* Encabezado de la Línea con Badge Reactivo Limpio */}
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-3">
+                <div 
+                  onClick={() => onSelectLine(item.line.code)}
+                  className="flex items-center gap-3 cursor-pointer group/title select-none hover:opacity-90 transition-opacity"
+                  title={`Abrir panel de producción de ${item.line.code}`}
+                >
                   <span className={cn(
-                    "text-sm font-black px-3.5 py-1.5 rounded-xl border shadow-sm tracking-wider",
+                    "text-sm font-black px-3.5 py-1.5 rounded-xl border shadow-sm tracking-wider group-hover/title:scale-105 transition-transform",
                     goldMode
                       ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
                       : "bg-emerald-600 text-white border-emerald-500/40"
@@ -1014,9 +1018,10 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                   <div>
                     <h3 className={cn(
                       "text-base sm:text-lg font-black transition-colors flex items-center gap-1.5",
-                      goldMode ? "text-white group-hover:text-emerald-400" : "text-[#0f291e] group-hover:text-emerald-700"
+                      goldMode ? "text-white group-hover/title:text-amber-400" : "text-[#0f291e] group-hover/title:text-emerald-700"
                     )}>
                       <span>Línea {item.line.code}</span>
+                      <ArrowRight className="w-4 h-4 opacity-40 group-hover/title:opacity-100 group-hover/title:translate-x-1 transition-all" />
                     </h3>
                     <p className={cn("text-[11px] font-mono", goldMode ? "text-white/40" : "text-[#64748b]")}>
                       📋 {item.queueLength} {item.queueLength === 1 ? "formato" : "formatos"} ({item.pendingCount} en cola)
@@ -1269,10 +1274,10 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-black text-xs uppercase tracking-wide">
-                              {isDelayCritical ? "🔴 Posible palet olvidado" : "🟡 Retraso detectado"}
+                              {isDelayCritical ? "⚠️ Verificación de Palet Requerida" : "ℹ️ Tiempo de Ciclo Prolongado"}
                             </span>
                             <span className="font-mono text-[10px] opacity-70">
-                              {minutesSinceLastPallet}m / esperado ~{estimatedPalletMinutes > 0 ? `${estimatedPalletMinutes}m` : ">5m"}
+                              {minutesSinceLastPallet}m transcurridos / cadencia ~{estimatedPalletMinutes > 0 ? `${estimatedPalletMinutes}m` : "15m"}
                             </span>
                           </div>
                           {/* Mensaje IA (si ya cargó) */}
@@ -1282,10 +1287,10 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                             </p>
                           )}
                           {isDelayCritical && !aiAlerts[item.line.code]?.message && (
-                            <p className="text-xs mt-1 opacity-60 italic">Analizando situación... ⌛</p>
+                            <p className="text-xs mt-1 opacity-60 italic">Supervisión L.I.A analizando estado de línea... ⌛</p>
                           )}
                           {!isDelayCritical && (
-                            <p className="text-xs mt-0.5 opacity-80">¿Completaste un palet? Pulsa el botón para registrarlo.</p>
+                            <p className="text-xs mt-0.5 opacity-80">Por favor, confirme si el palet en curso ha sido completado para registrarlo en el sistema.</p>
                           )}
                         </div>
                       </div>
@@ -1744,31 +1749,53 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                   <p className={cn("text-xs", goldMode ? "text-white/40" : "text-[#64748b]")}>
                     Inicia una orden directamente en {item.line.code} con 1 clic:
                   </p>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setQuickAddLineCode(item.line.code);
-                    }}
-                    className={cn(
-                      "px-4 py-2.5 rounded-xl text-xs font-black transition-all active:scale-95 inline-flex items-center gap-2 cursor-pointer shadow-md",
-                      goldMode
-                        ? "bg-amber-500 text-black hover:bg-amber-400"
-                        : "bg-emerald-600 text-white hover:bg-emerald-700"
-                    )}
-                    type="button"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>⚡ Cargar Ensalada Rápida en {item.line.code}</span>
-                  </button>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setQuickAddLineCode(item.line.code);
+                      }}
+                      className={cn(
+                        "px-4 py-2.5 rounded-xl text-xs font-black transition-all active:scale-95 inline-flex items-center gap-2 cursor-pointer shadow-md",
+                        goldMode
+                          ? "bg-amber-500 text-black hover:bg-amber-400"
+                          : "bg-emerald-600 text-white hover:bg-emerald-700"
+                      )}
+                      type="button"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>⚡ Cargar Ensalada Rápida</span>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectLine(item.line.code);
+                      }}
+                      className={cn(
+                        "px-4 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 inline-flex items-center gap-2 cursor-pointer border shadow-sm",
+                        goldMode
+                          ? "bg-white/5 hover:bg-white/10 border-white/10 text-white"
+                          : "bg-white hover:bg-emerald-50 border-emerald-600/20 text-[#0f291e]"
+                      )}
+                      type="button"
+                    >
+                      <span>✏️ Abrir Panel {item.line.code}</span>
+                      <ChevronRight className="w-3.5 h-3.5 opacity-60" />
+                    </button>
+                  </div>
                 </div>
               )}
 
               {/* Pie de Tarjeta (Limpio) */}
               <div className={cn("flex items-center justify-end pt-1 text-xs border-t", goldMode ? "border-white/5" : "border-emerald-600/10")}>
-                <span className="text-emerald-600 font-bold flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                <button
+                  type="button"
+                  onClick={() => onSelectLine(item.line.code)}
+                  className="text-emerald-600 font-bold flex items-center gap-1 group-hover:translate-x-1 transition-transform cursor-pointer hover:text-emerald-700 bg-transparent border-none p-0"
+                >
                   <span>Ir a {item.line.code}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
-                </span>
+                </button>
               </div>
             </div>
           );

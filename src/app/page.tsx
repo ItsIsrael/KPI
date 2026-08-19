@@ -23,6 +23,7 @@ import { LoginScreen } from "@/components/LoginScreen";
 import { ScreenLockOverlay } from "@/components/ScreenLockOverlay";
 import { MultiLineDashboard } from "@/components/MultiLineDashboard";
 import { QuickQueueBuilder } from "@/components/QuickQueueBuilder";
+import { VersionNotifier } from "@/components/VersionNotifier";
 import { subscribeToLineChanges } from "@/lib/supabase-service";
 import { useTabClock } from "@/hooks/useTabClock";
 
@@ -724,6 +725,7 @@ export default function Home() {
         highContrastMode ? "high-contrast" : goldMode ? "gold-mode" : "florette-mode"
       )}
     >
+      <VersionNotifier goldMode={goldMode} />
       {goldMode && isProducing && currentProgress?.finished && <GoldConfetti />}
       {/* Background ambient glows */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 select-none opacity-80 glass-bg-blobs">

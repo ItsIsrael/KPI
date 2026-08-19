@@ -3,12 +3,119 @@
 import React, { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import { cn } from "@/lib/utils";
-import { Upload, X, Check, CheckCircle2, FileSpreadsheet, Trash2, RefreshCw, AlertTriangle } from "lucide-react";
+import { Upload, X, Check, CheckCircle2, FileSpreadsheet, Trash2, RefreshCw, AlertTriangle, Info, Eye, ChevronDown, ChevronUp } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useProductionStore } from "@/store/production-store";
 import { DEFAULT_BOX_TYPES, generateId, type Salad, type Format } from "@/types/types";
+
+// ===== TIPOS PARA FEEDBACK DE CARGA =====
+
+interface ColumnMatch {
+  expected: string;
+  found: string | null;
+  status: "exact" | "fuzzy" | "missing";
+  critical: boolean; // Si es obligatoria para que funcione
+}
+
+interface UploadFeedback {
+  fileName: string;
+  totalRows: number;
+  validRows: number;
+  discardedRows: number;
+  headers: string[];
+  columnMatches: ColumnMatch[];
+  rawPreview: Record<string, unknown>[]; // Primeras 3 filas raw
+  hasErrors: boolean;
+  errorMessage?: string;
+}
+
+// Columnas esperadas y sus variaciones conocidas
+const EXPECTED_COLUMNS: { key: string; aliases: string[]; critical: boolean; label: string }[] = [
+  { key: "codigo", aliases: ["Código de artic.", "Código", "Codigo", "Material", "Código artículo", "Art.", "Articulo", "Cod"], critical: true, label: "Código Artículo" },
+  { key: "nombre", aliases: ["Nombre", "Descripción", "Description", "Denominación", "Producto", "Descripcion"], critical: true, label: "Nombre / Descripción" },
+  { key: "recurso", aliases: ["Recurso", "Puesto de trabajo", "Puesto", "Centro trabajo", "Línea", "Linea"], critical: false, label: "Recurso (Línea)" },
+  { key: "estado", aliases: ["Estado", "Status", "Est."], critical: false, label: "Estado" },
+  { key: "cantidad", aliases: ["Cantidad", "Cant.", "Qty", "Cantidad total", "Ctd"], critical: true, label: "Cantidad" },
+  { key: "lote", aliases: ["Número de lote", "Lote", "Nº Lote", "Num. Lote", "Batch"], critical: false, label: "Lote" },
+  { key: "noticia", aliases: ["Noticia", "Texto", "Notas", "Observaciones", "Comentario"], critical: false, label: "Noticia (DLC)" },
+  { key: "fecha", aliases: ["Desde fecha", "Fecha", "Fecha inicio", "Date"], critical: false, label: "Fecha" },
+  { key: "hora", aliases: ["Desde", "Hora", "Hora inicio", "Time"], critical: false, label: "Hora" },
+];
+
+// Fuzzy matching simple: normalizar y comparar
+function normalizeStr(s: string): string {
+  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "").trim();
+}
+
+function fuzzyMatch(header: string, alias: string): boolean {
+  const h = normalizeStr(header);
+  const a = normalizeStr(alias);
+  if (h === a) return true;
+  if (h.includes(a) || a.includes(h)) return true;
+  // Check si al menos 70% de los caracteres coinciden (Levenshtein light)
+  if (a.length >= 3 && h.length >= 3) {
+    let matches = 0;
+    const shorter = h.length < a.length ? h : a;
+    const longer = h.length >= a.length ? h : a;
+    for (const char of shorter) {
+      if (longer.includes(char)) matches++;
+    }
+    return (matches / shorter.length) >= 0.75;
+  }
+  return false;
+}
+
+function analyzeExcelColumns(headers: string[]): { matches: ColumnMatch[]; columnMap: Record<string, string> } {
+  const matches: ColumnMatch[] = [];
+  const columnMap: Record<string, string> = {};
+  const usedHeaders = new Set<string>();
+
+  for (const col of EXPECTED_COLUMNS) {
+    let found: { header: string; type: "exact" | "fuzzy" } | null = null;
+
+    // 1. Buscar match exacto
+    for (const alias of col.aliases) {
+      const exactHeader = headers.find(h => h === alias && !usedHeaders.has(h));
+      if (exactHeader) {
+        found = { header: exactHeader, type: "exact" };
+        break;
+      }
+    }
+
+    // 2. Si no hay exacto, buscar fuzzy
+    if (!found) {
+      for (const alias of col.aliases) {
+        const fuzzyHeader = headers.find(h => !usedHeaders.has(h) && fuzzyMatch(h, alias));
+        if (fuzzyHeader) {
+          found = { header: fuzzyHeader, type: "fuzzy" };
+          break;
+        }
+      }
+    }
+
+    if (found) {
+      usedHeaders.add(found.header);
+      columnMap[col.key] = found.header;
+      matches.push({
+        expected: col.label,
+        found: found.header,
+        status: found.type,
+        critical: col.critical,
+      });
+    } else {
+      matches.push({
+        expected: col.label,
+        found: null,
+        status: "missing",
+        critical: col.critical,
+      });
+    }
+  }
+
+  return { matches, columnMap };
+}
 
 interface ParsedRow {
   id: string;
@@ -72,6 +179,9 @@ export function ExcelUploader({ open, onOpenChange, goldMode = false }: ExcelUpl
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingWarning, setPendingWarning] = useState<{ action: "line" | "selected", target?: string, warnings: string[] } | null>(null);
+  const [uploadFeedback, setUploadFeedback] = useState<UploadFeedback | null>(null);
+  const [showFeedbackDetails, setShowFeedbackDetails] = useState(true);
+  const [showRawPreview, setShowRawPreview] = useState(false);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -91,23 +201,27 @@ export function ExcelUploader({ open, onOpenChange, goldMode = false }: ExcelUpl
       // Parse to JSON array of objects
       const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
 
-      const mappedData: ParsedRow[] = jsonData.map((row, index) => {
-        // Try to handle different column name variations
-        const codigo = row["Código de artic."] || row["Código"] || row["Codigo"] || row["Material"] || "";
-        const nombre = row["Nombre"] || row["Descripción"] || row["Description"] || "";
-        const recurso = row["Recurso"] || row["Puesto de trabajo"] || "";
-        const estado = row["Estado"] || "";
-        const cantidadStr = row["Cantidad"] || row["Cant."] || "0";
-        // parse quantity format e.g., "266,00" -> 266
+      // === PASO 1: Extraer headers y analizar columnas ===
+      const headers = jsonData.length > 0 ? Object.keys(jsonData[0]) : [];
+      const { matches: columnMatches, columnMap } = analyzeExcelColumns(headers);
+      const rawPreview = jsonData.slice(0, 3);
+
+      // === PASO 2: Parsear usando el mapa de columnas inteligente ===
+      const mappedData: ParsedRow[] = jsonData.map((row) => {
+        const codigo = columnMap.codigo ? row[columnMap.codigo] : "";
+        const nombre = columnMap.nombre ? row[columnMap.nombre] : "";
+        const recurso = columnMap.recurso ? row[columnMap.recurso] : "";
+        const estado = columnMap.estado ? row[columnMap.estado] : "";
+        const cantidadStr = columnMap.cantidad ? row[columnMap.cantidad] : "0";
         const cantidad = typeof cantidadStr === 'number' ? cantidadStr : parseFloat(String(cantidadStr).replace(',', '.'));
-        const lote = row["Número de lote"] || row["Lote"] || "";
-        const noticia = row["Noticia"] || row["Texto"] || "";
+        const lote = columnMap.lote ? row[columnMap.lote] : "";
+        const noticia = columnMap.noticia ? row[columnMap.noticia] : "";
 
         const { name: boxTypeName, boxesPerPallet } = guessBoxType(String(nombre));
 
         // Parse time for sorting
-        const dateStr = row["Desde fecha"] || row["Fecha"] || "";
-        const timeStr = row["Desde"] || row["Hora"] || row["Hora inicio"] || "";
+        const dateStr = columnMap.fecha ? row[columnMap.fecha] : "";
+        const timeStr = columnMap.hora ? row[columnMap.hora] : "";
         let timestamp = 0;
         
         if (timeStr) {
@@ -120,31 +234,55 @@ export function ExcelUploader({ open, onOpenChange, goldMode = false }: ExcelUpl
               timestamp = Date.parse(parseStr);
             }
             if (isNaN(timestamp)) timestamp = 0;
-          } catch (e) {
+          } catch {
             timestamp = 0;
           }
         }
 
         return {
           id: generateId(),
-          codigo: String(codigo),
-          nombre: String(nombre),
-          recurso: String(recurso),
-          linea: mapRecursoToLine(String(recurso)),
-          estado: String(estado),
+          codigo: String(codigo || ""),
+          nombre: String(nombre || ""),
+          recurso: String(recurso || ""),
+          linea: mapRecursoToLine(String(recurso || "")),
+          estado: String(estado || ""),
           cantidad: isNaN(cantidad) ? 0 : cantidad,
-          lote: String(lote),
-          dlc: extractDLC(String(noticia)),
+          lote: String(lote || ""),
+          dlc: extractDLC(String(noticia || "")),
           boxType: boxTypeName,
           boxesPerPallet,
-          selected: true, // Default to selected
+          selected: true,
           timestamp
         } as ParsedRow & { timestamp: number };
-      }).filter(item => item.codigo && item.nombre); // Filter out empty rows
+      }).filter(item => item.codigo && item.nombre);
 
       // Ordenar por hora ("Desde")
       mappedData.sort((a, b) => a.timestamp - b.timestamp);
 
+      // === PASO 3: Generar feedback ===
+      const criticalMissing = columnMatches.filter(m => m.critical && m.status === "missing");
+      const hasErrors = mappedData.length === 0;
+
+      const feedback: UploadFeedback = {
+        fileName: file.name,
+        totalRows: jsonData.length,
+        validRows: mappedData.length,
+        discardedRows: jsonData.length - mappedData.length,
+        headers,
+        columnMatches,
+        rawPreview,
+        hasErrors,
+        errorMessage: hasErrors
+          ? criticalMissing.length > 0
+            ? `No se encontraron las columnas obligatorias: ${criticalMissing.map(m => m.expected).join(", ")}. Revisa que tu Excel tenga estas columnas.`
+            : jsonData.length === 0
+            ? "El archivo Excel está vacío o no tiene datos en la primera hoja."
+            : "Se leyeron filas pero ninguna tiene Código y Nombre válidos. Revisa el formato de los datos."
+          : undefined,
+      };
+
+      setUploadFeedback(feedback);
+      setShowFeedbackDetails(!hasErrors ? false : true); // Auto-collapse si todo OK
       setParsedData(mappedData);
     };
     reader.readAsArrayBuffer(file);
@@ -394,6 +532,182 @@ export function ExcelUploader({ open, onOpenChange, goldMode = false }: ExcelUpl
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto p-6">
+          {/* === PANEL DE FEEDBACK DE CARGA === */}
+          {uploadFeedback && (
+            <div className={cn(
+              "mb-4 rounded-2xl border overflow-hidden transition-all",
+              uploadFeedback.hasErrors
+                ? goldMode ? "border-red-500/40 bg-red-500/10" : "border-red-300 bg-red-50"
+                : goldMode ? "border-emerald-500/30 bg-emerald-500/5" : "border-emerald-200 bg-emerald-50/50"
+            )}>
+              {/* Header del feedback */}
+              <button
+                type="button"
+                onClick={() => setShowFeedbackDetails(!showFeedbackDetails)}
+                className={cn(
+                  "w-full px-4 py-3 flex items-center justify-between transition-colors",
+                  goldMode ? "hover:bg-white/5" : "hover:bg-black/5"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  {uploadFeedback.hasErrors ? (
+                    <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", goldMode ? "bg-red-500/20" : "bg-red-100")}>
+                      <AlertTriangle className="w-4 h-4 text-red-500" />
+                    </div>
+                  ) : (
+                    <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", goldMode ? "bg-emerald-500/20" : "bg-emerald-100")}>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    </div>
+                  )}
+                  <div className="text-left">
+                    <p className="text-sm font-bold">
+                      {uploadFeedback.hasErrors ? "❌ Error al procesar el Excel" : "✅ Excel cargado correctamente"}
+                    </p>
+                    <p className={cn("text-xs", goldMode ? "text-white/50" : "text-gray-500")}>
+                      {uploadFeedback.fileName} · {uploadFeedback.totalRows} filas · {uploadFeedback.validRows} válidas
+                      {uploadFeedback.discardedRows > 0 && ` · ${uploadFeedback.discardedRows} descartadas`}
+                    </p>
+                  </div>
+                </div>
+                {showFeedbackDetails ? <ChevronUp className="w-4 h-4 opacity-50" /> : <ChevronDown className="w-4 h-4 opacity-50" />}
+              </button>
+
+              {/* Detalles expandibles */}
+              {showFeedbackDetails && (
+                <div className={cn("px-4 pb-4 space-y-3 border-t", goldMode ? "border-white/10" : "border-gray-200")}>
+                  {/* Error principal */}
+                  {uploadFeedback.errorMessage && (
+                    <div className={cn(
+                      "mt-3 p-3 rounded-xl border text-sm font-medium",
+                      goldMode ? "bg-red-500/15 border-red-500/30 text-red-300" : "bg-red-100 border-red-200 text-red-700"
+                    )}>
+                      <p>{uploadFeedback.errorMessage}</p>
+                    </div>
+                  )}
+
+                  {/* Grid de columnas detectadas */}
+                  <div className="mt-3">
+                    <p className={cn("text-xs font-black uppercase tracking-wider mb-2", goldMode ? "text-white/40" : "text-gray-500")}>
+                      📊 Mapeo de Columnas
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+                      {uploadFeedback.columnMatches.map((match, idx) => (
+                        <div key={idx} className={cn(
+                          "flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs",
+                          match.status === "exact"
+                            ? goldMode ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300" : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                            : match.status === "fuzzy"
+                            ? goldMode ? "bg-amber-500/10 border-amber-500/30 text-amber-300" : "bg-amber-50 border-amber-200 text-amber-700"
+                            : match.critical
+                            ? goldMode ? "bg-red-500/10 border-red-500/30 text-red-300" : "bg-red-50 border-red-200 text-red-600"
+                            : goldMode ? "bg-white/5 border-white/10 text-white/40" : "bg-gray-50 border-gray-200 text-gray-400"
+                        )}>
+                          <span className="flex-shrink-0">
+                            {match.status === "exact" ? "✅" : match.status === "fuzzy" ? "⚠️" : match.critical ? "❌" : "⬜"}
+                          </span>
+                          <span className="font-bold truncate">{match.expected}</span>
+                          {match.found && (
+                            <span className={cn("ml-auto text-[10px] font-mono truncate max-w-[120px]", goldMode ? "text-white/30" : "text-gray-400")}>
+                              → {match.found}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Headers reales del Excel */}
+                  {uploadFeedback.headers.length > 0 && (
+                    <div>
+                      <p className={cn("text-xs font-black uppercase tracking-wider mb-1.5", goldMode ? "text-white/40" : "text-gray-500")}>
+                        🏷️ Columnas en tu Excel ({uploadFeedback.headers.length})
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {uploadFeedback.headers.map((h, i) => (
+                          <span key={i} className={cn(
+                            "px-2 py-0.5 rounded-md text-[10px] font-mono font-bold border",
+                            goldMode ? "bg-white/5 border-white/10 text-white/60" : "bg-white border-gray-200 text-gray-600"
+                          )}>
+                            {h}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Preview de datos raw */}
+                  {uploadFeedback.rawPreview.length > 0 && (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setShowRawPreview(!showRawPreview)}
+                        className={cn(
+                          "flex items-center gap-2 text-xs font-bold transition-colors",
+                          goldMode ? "text-white/50 hover:text-white/80" : "text-gray-500 hover:text-gray-700"
+                        )}
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>{showRawPreview ? "Ocultar" : "Ver"} preview de datos raw ({uploadFeedback.rawPreview.length} filas)</span>
+                        {showRawPreview ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                      </button>
+                      {showRawPreview && (
+                        <div className="mt-2 overflow-x-auto">
+                          <table className={cn(
+                            "min-w-full text-[10px] font-mono border-collapse",
+                            goldMode ? "text-white/70" : "text-gray-600"
+                          )}>
+                            <thead>
+                              <tr>
+                                {uploadFeedback.headers.map((h, i) => (
+                                  <th key={i} className={cn(
+                                    "px-2 py-1 text-left font-black border-b whitespace-nowrap",
+                                    goldMode ? "border-white/10 text-white/50" : "border-gray-200 text-gray-500"
+                                  )}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {uploadFeedback.rawPreview.map((row, rIdx) => (
+                                <tr key={rIdx} className={cn(goldMode ? "border-b border-white/5" : "border-b border-gray-100")}>
+                                  {uploadFeedback.headers.map((h, cIdx) => (
+                                    <td key={cIdx} className="px-2 py-1 whitespace-nowrap max-w-[200px] truncate">
+                                      {String(row[h] ?? "")}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Botón para reintentar */}
+                  {uploadFeedback.hasErrors && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setUploadFeedback(null);
+                          fileInputRef.current?.click();
+                        }}
+                        className={cn(
+                          "text-xs font-bold",
+                          goldMode ? "border-amber-500/30 hover:bg-amber-500/20 text-amber-400" : "border-emerald-200 hover:bg-emerald-50 text-emerald-700"
+                        )}
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                        Subir otro archivo
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {!hasData ? (
             <div 
               className={cn(
@@ -557,7 +871,7 @@ export function ExcelUploader({ open, onOpenChange, goldMode = false }: ExcelUpl
           )}>
             <Button 
               variant="outline" 
-              onClick={() => setParsedData([])}
+              onClick={() => { setParsedData([]); setUploadFeedback(null); }}
               className={cn(
                 "flex items-center gap-2 text-red-500 hover:text-red-600 hover:bg-red-50",
                 goldMode ? "border-red-500/30 bg-transparent hover:bg-red-500/20" : ""
