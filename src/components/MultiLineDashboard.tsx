@@ -1304,7 +1304,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                             <span>🪵 MATRIZ DE PALETS ({prog.completedPallets}/{totalMilagroPallets})</span>
                             {estimatedPalletMinutes > 0 && (
                               <span className={cn("normal-case tracking-normal border px-1.5 rounded-sm", isDelayWarning ? "border-red-400 text-red-500 font-bold bg-red-500/10 animate-pulse" : (goldMode ? "border-white/10 text-white/50" : "border-emerald-600/20 text-emerald-700/60"))}>
-                                {isDelayWarning ? `⚠️ Atrado: ${minutesSinceLastPallet}m / ${estimatedPalletMinutes}m` : `~${estimatedPalletMinutes}m/palet`}
+                                {isDelayWarning ? `⚠️ Atrasado: ${minutesSinceLastPallet}m / ${estimatedPalletMinutes}m` : `~${estimatedPalletMinutes}m/palet`}
                               </span>
                             )}
                           </p>

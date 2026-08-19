@@ -15,27 +15,31 @@ export function VersionNotifier({ goldMode = false }: VersionNotifierProps) {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    // Comprobar la versión cada 2 minutos
+    const currentClientVersion = packageJson.version;
+
     const checkVersion = async () => {
       try {
         const res = await fetch(`/api/version?t=${Date.now()}`, {
           cache: "no-store",
-          headers: { "Cache-Control": "no-cache" },
+          headers: { 
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+          },
         });
         if (!res.ok) return;
         const data = await res.json();
-        if (data && data.version && data.version !== packageJson.version) {
+        if (data && data.version && data.version !== currentClientVersion) {
           setHasNewVersion(true);
         }
       } catch (err) {
-        // Silencioso si falla la conexión temporalmente
+        // Silencioso si hay corte de red
       }
     };
 
-    // Primera comprobación tras 30 segundos
-    const initialTimer = setTimeout(checkVersion, 30000);
-    // Intervalo cada 2 minutos
-    const interval = setInterval(checkVersion, 120000);
+    // Primera comprobación a los 5 segundos de abrir
+    const initialTimer = setTimeout(checkVersion, 5000);
+    // Intervalo de comprobación rápida cada 30 segundos
+    const interval = setInterval(checkVersion, 30000);
 
     return () => {
       clearTimeout(initialTimer);
