@@ -36,38 +36,84 @@ export function NoblejasUploader({ open, onOpenChange, goldMode = false }: Noble
   const [manualPalets, setManualPalets] = useState("");
   const [manualExtra, setManualExtra] = useState("");
 
+  const [uploadFeedback, setUploadFeedback] = useState<{ total: number; valid: number; error?: string } | null>(null);
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       processFile(file);
+      e.target.value = "";
     }
   };
 
   const processFile = (file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
-      const data = new Uint8Array(e.target?.result as ArrayBuffer);
-      const workbook = XLSX.read(data, { type: "array" });
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
+        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+          throw new Error("El archivo Excel no contiene hojas.");
+        }
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
 
-      const newEntries = jsonData.map((row) => {
-        const codigo = String(row["Código de artic."] || row["Código"] || row["Codigo"] || row["10E"] || "");
-        const nombre = String(row["Nombre"] || row["Descripción"] || row["Description"] || "");
-        const palets = parseInt(String(row["Palets"] || "0"), 10);
-        const cajasExtra = parseInt(String(row["Cajas Extra"] || row["Cajas extra"] || "0"), 10);
+        if (!jsonData || jsonData.length === 0) {
+          setUploadFeedback({ total: 0, valid: 0, error: "El archivo está vacío o no contiene filas con datos." });
+          return;
+        }
 
-        return {
-          id: crypto.randomUUID(),
-          codigo,
-          nombre,
-          palets: isNaN(palets) ? 0 : palets,
-          cajasExtra: isNaN(cajasExtra) ? 0 : cajasExtra,
-        };
-      }).filter(item => item.codigo);
+        const newEntries = jsonData.map((row) => {
+          // Buscar columna de código con múltiples variantes
+          const rawCodigo = Object.entries(row).find(([k]) => 
+            /c[oó]d/i.test(k) || /10e/i.test(k) || /art/i.test(k) || /material/i.test(k)
+          )?.[1] || "";
+          
+          let codigo = String(rawCodigo).trim().toUpperCase();
+          if (codigo && !codigo.startsWith("10E")) {
+            codigo = `10E${codigo.replace(/^E/i, '')}`;
+          }
 
-      setEntries(prev => [...prev, ...newEntries]);
+          // Buscar nombre
+          const nombre = String(
+            Object.entries(row).find(([k]) => /nom/i.test(k) || /desc/i.test(k) || /prod/i.test(k))?.[1] || "Ensalada Noblejas"
+          ).trim();
+
+          // Buscar palets
+          const rawPalets = Object.entries(row).find(([k]) => /palet/i.test(k) || /pal/i.test(k))?.[1] || "0";
+          const palets = parseInt(String(rawPalets), 10);
+
+          // Buscar cajas extra
+          const rawExtra = Object.entries(row).find(([k]) => /extra/i.test(k) || /pico/i.test(k) || /suelta/i.test(k))?.[1] || "0";
+          const cajasExtra = parseInt(String(rawExtra), 10);
+
+          return {
+            id: crypto.randomUUID(),
+            codigo,
+            nombre,
+            palets: isNaN(palets) ? 0 : palets,
+            cajasExtra: isNaN(cajasExtra) ? 0 : cajasExtra,
+          };
+        }).filter(item => item.codigo && item.codigo.length > 3);
+
+        if (newEntries.length === 0) {
+          setUploadFeedback({
+            total: jsonData.length,
+            valid: 0,
+            error: "Se leyeron filas pero no se detectaron códigos de artículo válidos (ej. 10E943 o 943). Revisa las columnas de tu Excel.",
+          });
+          return;
+        }
+
+        setEntries(prev => [...prev, ...newEntries]);
+        setUploadFeedback({ total: jsonData.length, valid: newEntries.length });
+      } catch (err: any) {
+        setUploadFeedback({ total: 0, valid: 0, error: `Error al procesar archivo: ${err?.message || "Formato no compatible."}` });
+      }
+    };
+    reader.onerror = () => {
+      setUploadFeedback({ total: 0, valid: 0, error: "Error al leer el archivo desde el navegador." });
     };
     reader.readAsArrayBuffer(file);
   };
@@ -271,6 +317,32 @@ export function NoblejasUploader({ open, onOpenChange, goldMode = false }: Noble
               onChange={handleFileUpload}
             />
           </div>
+
+          {/* Feedback de Subida Noblejas */}
+          {uploadFeedback && (
+            <div className={cn(
+              "p-3 rounded-xl border text-xs font-bold flex items-center justify-between gap-2",
+              uploadFeedback.error
+                ? goldMode ? "bg-red-500/15 border-red-500/30 text-red-300" : "bg-red-50 border-red-200 text-red-700"
+                : goldMode ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300" : "bg-emerald-50 border-emerald-200 text-emerald-700"
+            )}>
+              <div className="flex items-center gap-2">
+                <span>{uploadFeedback.error ? "❌" : "✅"}</span>
+                <span>
+                  {uploadFeedback.error
+                    ? uploadFeedback.error
+                    : `Se han cargado ${uploadFeedback.valid} artículos de Noblejas correctamente (${uploadFeedback.total} filas leídas).`}
+                </span>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setUploadFeedback(null)} 
+                className="opacity-50 hover:opacity-100 p-1"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           {/* List of Entries */}
           {entries.length > 0 && (

@@ -33,15 +33,15 @@ interface UploadFeedback {
 
 // Columnas esperadas y sus variaciones conocidas
 const EXPECTED_COLUMNS: { key: string; aliases: string[]; critical: boolean; label: string }[] = [
-  { key: "codigo", aliases: ["Código de artic.", "Código", "Codigo", "Material", "Código artículo", "Art.", "Articulo", "Cod"], critical: true, label: "Código Artículo" },
-  { key: "nombre", aliases: ["Nombre", "Descripción", "Description", "Denominación", "Producto", "Descripcion"], critical: true, label: "Nombre / Descripción" },
-  { key: "recurso", aliases: ["Recurso", "Puesto de trabajo", "Puesto", "Centro trabajo", "Línea", "Linea"], critical: false, label: "Recurso (Línea)" },
-  { key: "estado", aliases: ["Estado", "Status", "Est."], critical: false, label: "Estado" },
-  { key: "cantidad", aliases: ["Cantidad", "Cant.", "Qty", "Cantidad total", "Ctd"], critical: true, label: "Cantidad" },
-  { key: "lote", aliases: ["Número de lote", "Lote", "Nº Lote", "Num. Lote", "Batch"], critical: false, label: "Lote" },
-  { key: "noticia", aliases: ["Noticia", "Texto", "Notas", "Observaciones", "Comentario"], critical: false, label: "Noticia (DLC)" },
-  { key: "fecha", aliases: ["Desde fecha", "Fecha", "Fecha inicio", "Date"], critical: false, label: "Fecha" },
-  { key: "hora", aliases: ["Desde", "Hora", "Hora inicio", "Time"], critical: false, label: "Hora" },
+  { key: "codigo", aliases: ["Código de artic.", "Código", "Codigo", "Material", "Código artículo", "Art.", "Articulo", "Cod", "10E", "Referencia", "Ref"], critical: true, label: "Código Artículo" },
+  { key: "nombre", aliases: ["Nombre", "Descripción", "Description", "Denominación", "Producto", "Descripcion", "Texto breve material", "Desc.", "Articulo"], critical: true, label: "Nombre / Descripción" },
+  { key: "recurso", aliases: ["Recurso", "Puesto de trabajo", "Puesto", "Centro trabajo", "Línea", "Linea", "Lin", "Work Center", "Ubicación"], critical: false, label: "Recurso (Línea)" },
+  { key: "estado", aliases: ["Estado", "Status", "Est.", "Situación", "Estado orden"], critical: false, label: "Estado" },
+  { key: "cantidad", aliases: ["Cantidad", "Cant.", "Qty", "Cantidad total", "Ctd", "Cajas", "Total cajas", "Volumen"], critical: true, label: "Cantidad" },
+  { key: "lote", aliases: ["Número de lote", "Lote", "Nº Lote", "Num. Lote", "Batch", "Lote prod", "Lote fab"], critical: false, label: "Lote" },
+  { key: "noticia", aliases: ["Noticia", "Texto", "Notas", "Observaciones", "Comentario", "DLC", "Caducidad", "Fecha caducidad"], critical: false, label: "Noticia (DLC)" },
+  { key: "fecha", aliases: ["Desde fecha", "Fecha", "Fecha inicio", "Date", "F. Inicio", "Fecha fab"], critical: false, label: "Fecha" },
+  { key: "hora", aliases: ["Desde", "Hora", "Hora inicio", "Time", "H. Inicio", "Hora fab"], critical: false, label: "Hora" },
 ];
 
 // Fuzzy matching simple: normalizar y comparar
@@ -167,10 +167,11 @@ function extractDLC(noticia: string): string {
 
 function mapRecursoToLine(recurso: string): string {
   const r = recurso?.trim().toUpperCase();
-  if (r === "12C00") return "K00";
-  if (r === "12C01") return "K01";
-  if (r === "12C02") return "K02";
-  if (r === "12C03") return "K03";
+  if (!r) return "K00";
+  if (r === "12C00" || r === "K00" || r === "K0" || r.includes("00") || r.endsWith(" 0") || r.includes("L00") || r.includes("L0")) return "K00";
+  if (r === "12C01" || r === "K01" || r === "K1" || r.includes("01") || r.endsWith(" 1") || r.includes("L01") || r.includes("L1")) return "K01";
+  if (r === "12C02" || r === "K02" || r === "K2" || r.includes("02") || r.endsWith(" 2") || r.includes("L02") || r.includes("L2")) return "K02";
+  if (r === "12C03" || r === "K03" || r === "K3" || r.includes("03") || r.endsWith(" 3") || r.includes("L03") || r.includes("L3")) return "K03";
   return "K00"; // fallback
 }
 
@@ -187,103 +188,155 @@ export function ExcelUploader({ open, onOpenChange, goldMode = false }: ExcelUpl
     const file = e.target.files?.[0];
     if (file) {
       processFile(file);
+      // Reset input para permitir re-subir el mismo archivo si se desea
+      e.target.value = "";
     }
   };
 
   const processFile = (file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
-      const data = new Uint8Array(e.target?.result as ArrayBuffer);
-      const workbook = XLSX.read(data, { type: "array" });
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      
-      // Parse to JSON array of objects
-      const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
-
-      // === PASO 1: Extraer headers y analizar columnas ===
-      const headers = jsonData.length > 0 ? Object.keys(jsonData[0]) : [];
-      const { matches: columnMatches, columnMap } = analyzeExcelColumns(headers);
-      const rawPreview = jsonData.slice(0, 3);
-
-      // === PASO 2: Parsear usando el mapa de columnas inteligente ===
-      const mappedData: ParsedRow[] = jsonData.map((row) => {
-        const codigo = columnMap.codigo ? row[columnMap.codigo] : "";
-        const nombre = columnMap.nombre ? row[columnMap.nombre] : "";
-        const recurso = columnMap.recurso ? row[columnMap.recurso] : "";
-        const estado = columnMap.estado ? row[columnMap.estado] : "";
-        const cantidadStr = columnMap.cantidad ? row[columnMap.cantidad] : "0";
-        const cantidad = typeof cantidadStr === 'number' ? cantidadStr : parseFloat(String(cantidadStr).replace(',', '.'));
-        const lote = columnMap.lote ? row[columnMap.lote] : "";
-        const noticia = columnMap.noticia ? row[columnMap.noticia] : "";
-
-        const { name: boxTypeName, boxesPerPallet } = guessBoxType(String(nombre));
-
-        // Parse time for sorting
-        const dateStr = columnMap.fecha ? row[columnMap.fecha] : "";
-        const timeStr = columnMap.hora ? row[columnMap.hora] : "";
-        let timestamp = 0;
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
         
-        if (timeStr) {
-          try {
-            const datePart = dateStr || new Date().toLocaleDateString('es-ES');
-            const parts = String(datePart).split("/");
-            if (parts.length >= 3) {
-              const [day, month, year] = parts;
-              const parseStr = `${month}/${day}/${year} ${String(timeStr)}`;
-              timestamp = Date.parse(parseStr);
-            }
-            if (isNaN(timestamp)) timestamp = 0;
-          } catch {
-            timestamp = 0;
-          }
+        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+          throw new Error("El archivo Excel no contiene ninguna hoja.");
         }
 
-        return {
-          id: generateId(),
-          codigo: String(codigo || ""),
-          nombre: String(nombre || ""),
-          recurso: String(recurso || ""),
-          linea: mapRecursoToLine(String(recurso || "")),
-          estado: String(estado || ""),
-          cantidad: isNaN(cantidad) ? 0 : cantidad,
-          lote: String(lote || ""),
-          dlc: extractDLC(String(noticia || "")),
-          boxType: boxTypeName,
-          boxesPerPallet,
-          selected: true,
-          timestamp
-        } as ParsedRow & { timestamp: number };
-      }).filter(item => item.codigo && item.nombre);
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Parse to JSON array of objects
+        const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
 
-      // Ordenar por hora ("Desde")
-      mappedData.sort((a, b) => a.timestamp - b.timestamp);
+        if (!jsonData || jsonData.length === 0) {
+          setUploadFeedback({
+            fileName: file.name,
+            totalRows: 0,
+            validRows: 0,
+            discardedRows: 0,
+            headers: [],
+            columnMatches: [],
+            rawPreview: [],
+            hasErrors: true,
+            errorMessage: "El archivo Excel está completamente vacío o no contiene filas con datos.",
+          });
+          setShowFeedbackDetails(true);
+          return;
+        }
 
-      // === PASO 3: Generar feedback ===
-      const criticalMissing = columnMatches.filter(m => m.critical && m.status === "missing");
-      const hasErrors = mappedData.length === 0;
+        // === PASO 1: Extraer headers y analizar columnas ===
+        const headers = Object.keys(jsonData[0] || {});
+        const { matches: columnMatches, columnMap } = analyzeExcelColumns(headers);
+        const rawPreview = jsonData.slice(0, 3);
 
-      const feedback: UploadFeedback = {
+        // === PASO 2: Parsear usando el mapa de columnas inteligente ===
+        const mappedData: ParsedRow[] = jsonData.map((row) => {
+          const codigo = columnMap.codigo ? row[columnMap.codigo] : "";
+          const nombre = columnMap.nombre ? row[columnMap.nombre] : "";
+          const recurso = columnMap.recurso ? row[columnMap.recurso] : "";
+          const estado = columnMap.estado ? row[columnMap.estado] : "";
+          const cantidadStr = columnMap.cantidad ? row[columnMap.cantidad] : "0";
+          const cantidad = typeof cantidadStr === 'number' ? cantidadStr : parseFloat(String(cantidadStr).replace(',', '.'));
+          const lote = columnMap.lote ? row[columnMap.lote] : "";
+          const noticia = columnMap.noticia ? row[columnMap.noticia] : "";
+
+          const { name: boxTypeName, boxesPerPallet } = guessBoxType(String(nombre));
+
+          // Parse time for sorting
+          const dateStr = columnMap.fecha ? row[columnMap.fecha] : "";
+          const timeStr = columnMap.hora ? row[columnMap.hora] : "";
+          let timestamp = 0;
+          
+          if (timeStr) {
+            try {
+              const datePart = dateStr || new Date().toLocaleDateString('es-ES');
+              const parts = String(datePart).split("/");
+              if (parts.length >= 3) {
+                const [day, month, year] = parts;
+                const parseStr = `${month}/${day}/${year} ${String(timeStr)}`;
+                timestamp = Date.parse(parseStr);
+              }
+              if (isNaN(timestamp)) timestamp = 0;
+            } catch {
+              timestamp = 0;
+            }
+          }
+
+          return {
+            id: generateId(),
+            codigo: String(codigo || "").trim(),
+            nombre: String(nombre || "").trim(),
+            recurso: String(recurso || "").trim(),
+            linea: mapRecursoToLine(String(recurso || "")),
+            estado: String(estado || "").trim(),
+            cantidad: isNaN(cantidad) ? 0 : cantidad,
+            lote: String(lote || "").trim(),
+            dlc: extractDLC(String(noticia || "")),
+            boxType: boxTypeName,
+            boxesPerPallet,
+            selected: true,
+            timestamp
+          } as ParsedRow & { timestamp: number };
+        }).filter(item => item.codigo && item.nombre);
+
+        // Ordenar por hora ("Desde")
+        mappedData.sort((a, b) => a.timestamp - b.timestamp);
+
+        // === PASO 3: Generar feedback ===
+        const criticalMissing = columnMatches.filter(m => m.critical && m.status === "missing");
+        const hasErrors = mappedData.length === 0;
+
+        const feedback: UploadFeedback = {
+          fileName: file.name,
+          totalRows: jsonData.length,
+          validRows: mappedData.length,
+          discardedRows: jsonData.length - mappedData.length,
+          headers,
+          columnMatches,
+          rawPreview,
+          hasErrors,
+          errorMessage: hasErrors
+            ? criticalMissing.length > 0
+              ? `No se detectaron las columnas obligatorias: ${criticalMissing.map(m => m.expected).join(", ")}. Por favor, verifica los nombres de las columnas en tu Excel (se encontraron: ${headers.join(", ")}).`
+              : jsonData.length === 0
+              ? "El archivo Excel está vacío."
+              : "Se leyeron filas pero ninguna contiene un Código y Nombre válidos simultáneamente."
+            : undefined,
+        };
+
+        setUploadFeedback(feedback);
+        setShowFeedbackDetails(hasErrors);
+        setParsedData(mappedData);
+      } catch (err: any) {
+        setUploadFeedback({
+          fileName: file.name,
+          totalRows: 0,
+          validRows: 0,
+          discardedRows: 0,
+          headers: [],
+          columnMatches: [],
+          rawPreview: [],
+          hasErrors: true,
+          errorMessage: `Error de lectura en el archivo: ${err?.message || "Formato de archivo no compatible o corrupto."}`,
+        });
+        setShowFeedbackDetails(true);
+      }
+    };
+    reader.onerror = () => {
+      setUploadFeedback({
         fileName: file.name,
-        totalRows: jsonData.length,
-        validRows: mappedData.length,
-        discardedRows: jsonData.length - mappedData.length,
-        headers,
-        columnMatches,
-        rawPreview,
-        hasErrors,
-        errorMessage: hasErrors
-          ? criticalMissing.length > 0
-            ? `No se encontraron las columnas obligatorias: ${criticalMissing.map(m => m.expected).join(", ")}. Revisa que tu Excel tenga estas columnas.`
-            : jsonData.length === 0
-            ? "El archivo Excel está vacío o no tiene datos en la primera hoja."
-            : "Se leyeron filas pero ninguna tiene Código y Nombre válidos. Revisa el formato de los datos."
-          : undefined,
-      };
-
-      setUploadFeedback(feedback);
-      setShowFeedbackDetails(!hasErrors ? false : true); // Auto-collapse si todo OK
-      setParsedData(mappedData);
+        totalRows: 0,
+        validRows: 0,
+        discardedRows: 0,
+        headers: [],
+        columnMatches: [],
+        rawPreview: [],
+        hasErrors: true,
+        errorMessage: "Error al intentar leer el archivo desde el navegador.",
+      });
+      setShowFeedbackDetails(true);
     };
     reader.readAsArrayBuffer(file);
   };
