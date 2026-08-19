@@ -24,6 +24,7 @@ import { ScreenLockOverlay } from "@/components/ScreenLockOverlay";
 import { MultiLineDashboard } from "@/components/MultiLineDashboard";
 import { QuickQueueBuilder } from "@/components/QuickQueueBuilder";
 import { VersionNotifier } from "@/components/VersionNotifier";
+import { BroadcastListener } from "@/components/BroadcastAlerts";
 import { subscribeToLineChanges } from "@/lib/supabase-service";
 import { useTabClock } from "@/hooks/useTabClock";
 
@@ -726,6 +727,7 @@ export default function Home() {
       )}
     >
       <VersionNotifier goldMode={goldMode} />
+      <BroadcastListener goldMode={goldMode} currentLineCode={activeLineCode} />
       {goldMode && isProducing && currentProgress?.finished && <GoldConfetti />}
       {/* Background ambient glows */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 select-none opacity-80 glass-bg-blobs">

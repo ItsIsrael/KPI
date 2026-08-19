@@ -561,26 +561,44 @@ export function ExcelUploader({ open, onOpenChange, goldMode = false }: ExcelUpl
               <FileSpreadsheet className={cn("w-6 h-6", goldMode ? "text-amber-400" : "text-emerald-600")} />
               Cargar Plan de Producción (Excel)
             </DialogTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                const { fetchPendingExcelData } = await import("@/lib/supabase-service");
-                const data = await fetchPendingExcelData();
-                if (data && data.length > 0) {
-                  setParsedData(data);
-                }
-              }}
-              className={cn(
-                "flex items-center gap-2 text-xs h-8 px-3",
-                goldMode 
-                  ? "bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30" 
-                  : "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200"
+            <div className="flex items-center gap-2">
+              {hasData && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  className={cn(
+                    "flex items-center gap-1.5 text-xs h-8 px-3 font-bold",
+                    goldMode
+                      ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40"
+                      : "bg-white hover:bg-emerald-50 text-emerald-700 border-emerald-300"
+                  )}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Cambiar / Nuevo Excel
+                </Button>
               )}
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Sincronizar PCs
-            </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  const { fetchPendingExcelData } = await import("@/lib/supabase-service");
+                  const data = await fetchPendingExcelData();
+                  if (data && data.length > 0) {
+                    setParsedData(data);
+                  }
+                }}
+                className={cn(
+                  "flex items-center gap-2 text-xs h-8 px-3",
+                  goldMode 
+                    ? "bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30" 
+                    : "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200"
+                )}
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Sincronizar PCs
+              </Button>
+            </div>
           </div>
         </DialogHeader>
 

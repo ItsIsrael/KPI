@@ -5,18 +5,43 @@ import type { LineOverview, FormatProgress, Salad, QueueItem, HistoryItem } from
 import { calculateFormat, DEFAULT_BOX_TYPES, generateId, DEFAULT_SALADS } from "@/types/types";
 import { getFactoryOverview, syncProgress, syncLineState, syncQueueItems, saveHistoryLog, subscribeToGlobalChanges } from "@/lib/supabase-service";
 
+function extractSaladSpecs(name?: string) {
+  if (!name) return { weight: null, promoPrice: null, isPromo: false, cleanName: "" };
+  
+  // 1. Extraer precio de promo ej: 3,79 EUR, 3,99, 2.50€, etc.
+  const promoMatch = name.match(/(\d+[.,]\d{2})\s*(?:EUR|€)?\b/i) || name.match(/\bPROMO\b/i);
+  const promoPrice = promoMatch && promoMatch[1] ? `${promoMatch[1].replace('.', ',')}€` : (promoMatch ? "PROMO" : null);
+  const isPromo = Boolean(promoMatch);
+
+  // 2. Extraer peso ej: 300G, 325G, 210G, 230G, 1KG, etc.
+  const weightMatch = name.match(/(\d+(?:[.,]\d+)?\s*(?:G|GR|KG|KGS))\b/i);
+  const weight = weightMatch ? weightMatch[1].toUpperCase() : null;
+
+  // 3. Limpiar el nombre quitando códigos de caja, pesos, unidades (/6, etc.), precios promo y 'G' sueltas
+  let cleanName = name
+    .replace(/\[\w+\]/g, "")
+    .replace(/\b(?:LL6410|LL410|PV216|PV136|CART[OÓ]N|BARQUETA)\b(?:\s*\d+)?/gi, "")
+    .replace(/\b\d+(?:[.,]\d+)?\s*(?:G|GR|KG|KGS)\/\d+\b/gi, "")
+    .replace(/\b\d+(?:[.,]\d+)?\s*(?:G|GR|KG|KGS)\b/gi, "")
+    .replace(/\/\d+\b/g, "")
+    .replace(/\b\d+[.,]\d{2}\s*(?:EUR|€)?\b/gi, "")
+    .replace(/\b(?:EUR|€)\b/gi, "")
+    .replace(/\b[Gg]\b/g, "") // Limpiar " G" suelta residual
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return { weight, promoPrice, isPromo, cleanName: cleanName || name };
+}
+
 function formatDisplayName(codigo10e?: string, name?: string) {
   if (!name) return "";
-  if (!codigo10e) return name;
+  const { cleanName, isPromo, promoPrice } = extractSaladSpecs(name);
+  const promoTag = isPromo ? (promoPrice && promoPrice !== "PROMO" ? ` 🔥 PROMO ${promoPrice}` : " 🔥 PROMO") : "";
   
-  const upperName = name.toUpperCase();
+  if (!codigo10e) return `${cleanName}${promoTag}`;
+  
   const upperCode = codigo10e.toUpperCase();
-  
-  if (upperName.includes(`[${upperCode}]`)) {
-    return name;
-  }
-  
-  return `[${upperCode}] ${name}`;
+  return `[${upperCode}] ${cleanName}${promoTag}`;
 }
 
 import { testSupabaseConnection, type SupabaseTestResult } from "@/lib/supabase-test";
@@ -45,11 +70,13 @@ import {
   FileSpreadsheet,
   Settings,
   SkipForward,
-  Minus
+  Minus,
+  Megaphone
 } from "lucide-react";
 import { ManualOrderScanner } from "@/components/ManualOrderScanner";
 import { ExcelUploader } from "@/components/ExcelUploader";
 import { NoblejasUploader } from "@/components/NoblejasUploader";
+import { BroadcastSenderModal } from "@/components/BroadcastAlerts";
 
 interface MultiLineDashboardProps {
   onSelectLine: (lineCode: string) => void;
@@ -129,6 +156,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
   const [isManualScannerOpen, setManualScannerOpen] = useState(false);
   const [isExcelUploaderOpen, setExcelUploaderOpen] = useState(false);
   const [isNoblejasUploaderOpen, setNoblejasUploaderOpen] = useState(false);
+  const [isBroadcastSenderOpen, setBroadcastSenderOpen] = useState(false);
 
   const fetchOverview = async () => {
     const requestId = ++currentDashboardRequestId;
@@ -304,7 +332,14 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
       addedBoxes = item.calc.pico;
     }
 
-    const isFinished = nextPallets >= item.calc.pallets && (item.calc.pico === 0 || nextPicoDone);
+    const maxNobPallets = item.noblejasBoxes > 0 ? Math.floor(item.noblejasBoxes / item.currentItem.boxesPerPallet) : 0;
+    const nobPicoCajas = item.noblejasBoxes > 0 ? (item.noblejasBoxes % item.currentItem.boxesPerPallet) : 0;
+    const isNobDone = item.noblejasBoxes === 0 || (
+      (prog.noblejasCompletedPallets || 0) >= maxNobPallets && (nobPicoCajas === 0 || !!prog.nobjelasPicoCompleted)
+    );
+    const isMilagroDone = nextPallets >= item.calc.pallets && (item.calc.pico === 0 || nextPicoDone);
+    const isFinished = isMilagroDone && isNobDone;
+
     const updatedProg: FormatProgress = {
       ...prog,
       completedPallets: nextPallets,
@@ -372,11 +407,17 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
     }
 
     const isNobDone = nextNobPallets >= maxNobPallets && (nobPicoCajas === 0 || nextNobPicoDone);
+    const isMilagroDone = !item.calc || (
+      (prog.completedPallets || 0) >= item.calc.pallets && (item.calc.pico === 0 || !!prog.picoCompleted)
+    );
+    const isFinished = isMilagroDone && isNobDone;
+
     const updatedProg: FormatProgress = {
       ...prog,
       noblejasCompleted: isNobDone,
       noblejasCompletedPallets: nextNobPallets,
       nobjelasPicoCompleted: nextNobPicoDone,
+      finished: isFinished,
       palletLastUpdated: Date.now(),
     };
 
@@ -762,6 +803,21 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           </button>
 
           <button
+            onClick={() => setBroadcastSenderOpen(true)}
+            className={cn(
+              "h-8 px-2.5 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-sm border font-bold text-xs",
+              goldMode
+                ? "border-amber-400/40 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 shadow-amber-500/10"
+                : "border-emerald-600/30 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-700 shadow-emerald-600/10"
+            )}
+            title="Enviar Alerta / Mensaje a las Líneas"
+            type="button"
+          >
+            <Megaphone className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Enviar Alerta</span>
+          </button>
+
+          <button
             onClick={() => {
               fetchOverview();
               handleTestConnection();
@@ -936,9 +992,17 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           const maxNobPallets = currentItem && item.noblejasBoxes > 0 ? Math.floor(item.noblejasBoxes / currentItem.boxesPerPallet) : 0;
           const nobjelasPicoCajas = currentItem && item.noblejasBoxes > 0 ? (item.noblejasBoxes % currentItem.boxesPerPallet) : 0;
 
-          // Estado dinámico y 100% reactivo
+          const hasMilagroPalletsLeft = prog.completedPallets < totalMilagroPallets;
+          const hasMilagroPicoLeft = milagroPicoCajas > 0 && !prog.picoCompleted;
+          const isMilagroDone = !hasMilagroPalletsLeft && !hasMilagroPicoLeft;
+
+          const hasNobPalletsLeft = maxNobPallets > 0 && prog.noblejasCompletedPallets < maxNobPallets;
+          const hasNobPicoLeft = nobjelasPicoCajas > 0 && !prog.nobjelasPicoCompleted;
+          const isNobDone = item.noblejasBoxes === 0 || (!hasNobPalletsLeft && !hasNobPicoLeft);
+
+          // Estado dinámico y 100% reactivo (requiere terminar Milagro Y Noblejas si tiene cajas asignadas)
           const hasActiveOrders = item.queueLength > 0 && !!item.currentSaladName;
-          const isFinished = hasActiveOrders && (item.percent >= 100 || prog.finished);
+          const isFinished = hasActiveOrders && isMilagroDone && isNobDone;
           const isProducing = item.line.isProducing && hasActiveOrders && !isFinished;
 
           // === DETECCIÓN DE ANOMALÍA (ritmo de fábrica con tolerancia de 12 min base + IA) ===
@@ -977,14 +1041,6 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           if (!isDelayWarning && existingAlert) {
             setAiAlerts(prev => { const n = { ...prev }; delete n[item.line.code]; return n; });
           }
-
-          const hasMilagroPalletsLeft = prog.completedPallets < totalMilagroPallets;
-          const hasMilagroPicoLeft = milagroPicoCajas > 0 && !prog.picoCompleted;
-          const isMilagroDone = !hasMilagroPalletsLeft && !hasMilagroPicoLeft;
-
-          const hasNobPalletsLeft = maxNobPallets > 0 && prog.noblejasCompletedPallets < maxNobPallets;
-          const hasNobPicoLeft = nobjelasPicoCajas > 0 && !prog.nobjelasPicoCompleted;
-          const isNobDone = item.noblejasBoxes > 0 && !hasNobPalletsLeft && !hasNobPicoLeft;
 
           return (
             <div
@@ -1172,6 +1228,33 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                             <span>📦</span>
                             <span>{item.currentBoxType}</span>
                           </span>
+                          {(() => {
+                            const { weight, promoPrice, isPromo } = extractSaladSpecs(item.currentSaladName);
+                            return (
+                              <>
+                                {isPromo && (
+                                  <span className={cn(
+                                    "text-xs font-black px-2.5 py-1 rounded-lg border flex items-center gap-1.5 shadow-sm animate-pulse",
+                                    goldMode 
+                                      ? "bg-rose-500/20 border-rose-500/50 text-rose-300 ring-1 ring-rose-500/30" 
+                                      : "bg-rose-500 text-white border-rose-600 shadow-rose-500/30 font-black"
+                                  )}>
+                                    <span>🏷️</span>
+                                    <span>FILM PROMO {promoPrice ? `(${promoPrice})` : ""}</span>
+                                  </span>
+                                )}
+                                {weight && (
+                                  <span className={cn(
+                                    "text-xs font-bold px-2 py-1 rounded-lg border flex items-center gap-1 shadow-sm",
+                                    goldMode ? "bg-amber-500/10 border-amber-500/30 text-amber-300" : "bg-sky-50 border-sky-200 text-sky-700 font-black"
+                                  )}>
+                                    <span>⚖️</span>
+                                    <span>{weight}</span>
+                                  </span>
+                                )}
+                              </>
+                            );
+                          })()}
                           <span className={cn("text-xs font-mono font-bold px-2 py-1 bg-black/5 dark:bg-white/5 rounded-lg border border-black/10 dark:border-white/10", goldMode ? "text-white/80" : "text-[#334155]")}>
                             {item.totalBoxes} cajas totales
                           </span>
@@ -2195,6 +2278,13 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           </div>
         </div>
       )}
+
+      {/* Modal Emisor de Alertas a Líneas */}
+      <BroadcastSenderModal
+        open={isBroadcastSenderOpen}
+        onOpenChange={setBroadcastSenderOpen}
+        goldMode={goldMode}
+      />
     </div>
   );
 }
