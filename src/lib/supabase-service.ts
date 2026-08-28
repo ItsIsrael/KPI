@@ -12,10 +12,21 @@ import { DEFAULT_PRODUCTION_LINES, calculateFormat } from "@/types/types";
 // 1. GESTIÓN DE LÍNEAS (K00, K01, K02, K03)
 // ============================================================
 
+// Caché de líneas de producción: K00-K03 rara vez cambian, no hace falta
+// consultar Supabase cada vez que se reordena o añade una ensalada.
+let _linesCache: ProductionLine[] | null = null;
+let _linesCacheTs = 0;
+const LINES_CACHE_TTL = 60_000; // 60 segundos
+
 export async function getProductionLines(): Promise<ProductionLine[]> {
+  // Servir desde caché si es reciente
+  if (_linesCache && (Date.now() - _linesCacheTs < LINES_CACHE_TTL)) {
+    return _linesCache;
+  }
+
   if (!isSupabaseConfigured || !supabase) {
     // Retornar líneas locales por defecto
-    return DEFAULT_PRODUCTION_LINES.map((l, index) => ({
+    const local = DEFAULT_PRODUCTION_LINES.map((l, index) => ({
       id: `local-${l.code.toLowerCase()}`,
       code: l.code,
       name: l.name,
@@ -23,6 +34,9 @@ export async function getProductionLines(): Promise<ProductionLine[]> {
       currentQueueIndex: 0,
       isProducing: false,
     }));
+    _linesCache = local;
+    _linesCacheTs = Date.now();
+    return local;
   }
 
   try {
@@ -33,7 +47,7 @@ export async function getProductionLines(): Promise<ProductionLine[]> {
 
     if (error) {
       console.warn("Error cargando líneas de Supabase:", error.message);
-      return DEFAULT_PRODUCTION_LINES.map((l) => ({
+      const fallback = DEFAULT_PRODUCTION_LINES.map((l) => ({
         id: `local-${l.code.toLowerCase()}`,
         code: l.code,
         name: l.name,
@@ -41,14 +55,20 @@ export async function getProductionLines(): Promise<ProductionLine[]> {
         currentQueueIndex: 0,
         isProducing: false,
       }));
+      _linesCache = fallback;
+      _linesCacheTs = Date.now();
+      return fallback;
     }
 
     if (!data || data.length === 0) {
       // Sembrar líneas si la tabla está vacía
-      return await seedInitialLines();
+      const seeded = await seedInitialLines();
+      _linesCache = seeded;
+      _linesCacheTs = Date.now();
+      return seeded;
     }
 
-    return data.map((row) => ({
+    const result = data.map((row) => ({
       id: row.id,
       code: row.code,
       name: row.name,
@@ -57,9 +77,12 @@ export async function getProductionLines(): Promise<ProductionLine[]> {
       isProducing: row.is_producing || false,
       updatedAt: row.updated_at,
     }));
+    _linesCache = result;
+    _linesCacheTs = Date.now();
+    return result;
   } catch (err) {
     console.error("Error en getProductionLines:", err);
-    return DEFAULT_PRODUCTION_LINES.map((l) => ({
+    const fallback = DEFAULT_PRODUCTION_LINES.map((l) => ({
       id: `local-${l.code.toLowerCase()}`,
       code: l.code,
       name: l.name,
@@ -67,6 +90,9 @@ export async function getProductionLines(): Promise<ProductionLine[]> {
       currentQueueIndex: 0,
       isProducing: false,
     }));
+    _linesCache = fallback;
+    _linesCacheTs = Date.now();
+    return fallback;
   }
 }
 

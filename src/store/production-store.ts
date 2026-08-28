@@ -179,8 +179,8 @@ interface ProductionState {
 
   // ===== ACCIONES: COLA =====
   buildQueue: () => void;
-  reorderQueue: (fromIndex: number, toIndex: number) => void;
-  removeFromQueue: (index: number) => void;
+  reorderQueue: (fromIndex: number, toIndex: number) => Promise<void>;
+  removeFromQueue: (index: number) => Promise<void>;
   multiLineReorderQueue: (lineCode: string, fromIndex: number, toIndex: number) => void;
   multiLineRemoveFromQueue: (lineCode: string, index: number) => void;
   multiLineClearQueueAndSalads: (lineCode: string) => void;
@@ -956,25 +956,60 @@ export const useProductionStore = create<ProductionState>()(
         set({ queue });
       },
 
-      reorderQueue: (fromIndex, toIndex) =>
-        set((state) => {
-          const newQueue = [...state.queue];
-          const [moved] = newQueue.splice(fromIndex, 1);
-          newQueue.splice(toIndex, 0, moved);
-          if (state.activeLineId) {
-            syncQueueItems(state.activeLineId, newQueue);
-          }
-          return { queue: newQueue };
-        }),
+      reorderQueue: async (fromIndex, toIndex) => {
+        const state = get();
+        const newQueue = [...state.queue];
+        const [moved] = newQueue.splice(fromIndex, 1);
+        newQueue.splice(toIndex, 0, moved);
 
-      removeFromQueue: (index) =>
-        set((state) => {
-          const newQueue = state.queue.filter((_, i) => i !== index);
-          if (state.activeLineId) {
-            syncQueueItems(state.activeLineId, newQueue);
-          }
-          return { queue: newQueue };
-        }),
+        // Actualizar tanto queue top-level como lineStorage para coherencia total
+        const lineCode = state.activeLineCode;
+        set((s) => ({
+          queue: newQueue,
+          lineStorage: {
+            ...s.lineStorage,
+            ...(lineCode && lineCode !== "ALL" ? {
+              [lineCode]: {
+                ...(s.lineStorage[lineCode] || {}),
+                queue: newQueue,
+              }
+            } : {}),
+          },
+        }));
+
+        if (state.activeLineId) {
+          await syncQueueItems(state.activeLineId, newQueue);
+        }
+        if (lineCode && lineCode !== "ALL") {
+          broadcastLocalChange(lineCode);
+        }
+      },
+
+      removeFromQueue: async (index) => {
+        const state = get();
+        const newQueue = state.queue.filter((_, i) => i !== index);
+
+        const lineCode = state.activeLineCode;
+        set((s) => ({
+          queue: newQueue,
+          lineStorage: {
+            ...s.lineStorage,
+            ...(lineCode && lineCode !== "ALL" ? {
+              [lineCode]: {
+                ...(s.lineStorage[lineCode] || {}),
+                queue: newQueue,
+              }
+            } : {}),
+          },
+        }));
+
+        if (state.activeLineId) {
+          await syncQueueItems(state.activeLineId, newQueue);
+        }
+        if (lineCode && lineCode !== "ALL") {
+          broadcastLocalChange(lineCode);
+        }
+      },
 
       multiLineReorderQueue: async (lineCode, fromIndex, toIndex) => {
         const state = get();

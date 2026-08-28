@@ -105,9 +105,10 @@ export type TransitionType = "same" | "box-change" | "salad-change" | "lote-chan
 // ===== FUNCIONES AUXILIARES =====
 
 export function calculateFormat(format: Format): FormatCalculations {
+  const bpp = format.boxesPerPallet || 1; // Guard: evitar división por cero
   const production = Math.max(0, format.quantity - format.noblejas);
-  const pallets = Math.floor(production / format.boxesPerPallet);
-  const pico = production % format.boxesPerPallet;
+  const pallets = Math.floor(production / bpp);
+  const pico = production % bpp;
   return { production, pallets, pico };
 }
 
