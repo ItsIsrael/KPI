@@ -100,6 +100,14 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
     }
     return "ALL";
   });
+
+  // Persistir viewMode en localStorage para que sobreviva al entrar/salir de una línea
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("dashboardViewMode", viewMode);
+    }
+  }, [viewMode]);
+
   const [customSelectedLines, setCustomSelectedLines] = useState<string[]>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("dashboardCustomLines");
