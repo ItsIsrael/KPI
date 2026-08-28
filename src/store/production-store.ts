@@ -172,7 +172,8 @@ interface ProductionState {
   toggleScreenLock: () => void;
 
   // ===== ACCIONES: ENSALADAS =====
-  addSalad: (salad: Salad, targetLineCode?: string) => void;
+  addSalad: (salad: Salad, targetLineCode?: string) => Promise<void>;
+  addSaladsBulk: (saladsWithLine: { salad: Salad; lineCode: string }[]) => Promise<void>;
   removeSalad: (id: string) => void;
   updateSalad: (id: string, salad: Partial<Salad>) => void;
 
@@ -710,6 +711,132 @@ export const useProductionStore = create<ProductionState>()(
         }
       },
 
+      addSaladsBulk: async (saladsWithLine) => {
+        if (!saladsWithLine || saladsWithLine.length === 0) return;
+        const state = get();
+        const lines = await getProductionLines();
+
+        // Agrupar items por línea
+        const lineGroups: Record<string, { salads: Salad[]; queueItems: QueueItem[] }> = {};
+
+        for (const { salad, lineCode } of saladsWithLine) {
+          const lineCodeToUse = lineCode || state.activeLineCode || "K00";
+          if (!lineGroups[lineCodeToUse]) {
+            lineGroups[lineCodeToUse] = { salads: [], queueItems: [] };
+          }
+
+          const newQueueItems: QueueItem[] = salad.formats.map((format) => ({
+            id: generateId(),
+            saladId: salad.id,
+            saladName: salad.name,
+            formatId: format.id,
+            boxType: format.boxType,
+            quantity: format.quantity,
+            noblejas: format.noblejas,
+            boxesPerPallet: format.boxesPerPallet,
+            note: format.note,
+            lote: format.lote,
+            cambioLote: format.cambioLote,
+            codigo10e: format.codigo10e,
+            fechaCaducidad: format.fechaCaducidad,
+            linea: lineCodeToUse,
+          }));
+
+          lineGroups[lineCodeToUse].salads.push(salad);
+          lineGroups[lineCodeToUse].queueItems.push(...newQueueItems);
+        }
+
+        const updatedLineStorage = { ...state.lineStorage };
+        let updatedTopLevelQueue = [...state.queue];
+        let updatedTopLevelSalads = [...state.salads];
+        let updatedTopLevelProgress = state.currentProgress;
+        let updatedTopLevelQueueProgress = { ...(state.queueProgress || {}) };
+        let updatedTopLevelQueueIndex = state.currentQueueIndex;
+        let hasTopLevelChange = false;
+
+        const syncPromises: Promise<any>[] = [];
+
+        for (const [lineCode, { salads: newSalads, queueItems: newQueueItems }] of Object.entries(lineGroups)) {
+          const prevStorage = updatedLineStorage[lineCode] || {
+            salads: [],
+            queue: [],
+            currentQueueIndex: 0,
+            currentProgress: null,
+            queueProgress: {},
+            isProducing: false,
+          };
+
+          const targetQueue = [...prevStorage.queue, ...newQueueItems];
+          const targetSalads = [...prevStorage.salads, ...newSalads];
+          const targetProgressMap: Record<string, FormatProgress> = { ...(prevStorage.queueProgress || {}) };
+
+          newQueueItems.forEach((item) => {
+            if (!targetProgressMap[item.id]) {
+              targetProgressMap[item.id] = createInitialProgress(item.id);
+            }
+          });
+
+          const isNewStart = !prevStorage.isProducing || prevStorage.queue.length === 0 || !prevStorage.currentProgress;
+          const targetCurrentQueueIndex = isNewStart ? 0 : prevStorage.currentQueueIndex;
+          const currentItemInTarget = targetQueue[targetCurrentQueueIndex] || targetQueue[0];
+
+          const targetCurrentProgress = currentItemInTarget
+            ? targetProgressMap[currentItemInTarget.id] || createInitialProgress(currentItemInTarget.id)
+            : null;
+
+          if (targetCurrentProgress && currentItemInTarget) {
+            targetProgressMap[currentItemInTarget.id] = targetCurrentProgress;
+          }
+
+          const targetLineState = {
+            salads: targetSalads,
+            queue: targetQueue,
+            currentQueueIndex: targetCurrentQueueIndex,
+            currentProgress: targetCurrentProgress,
+            queueProgress: targetProgressMap,
+            isProducing: true,
+          };
+
+          updatedLineStorage[lineCode] = targetLineState;
+
+          if (lineCode === state.activeLineCode) {
+            hasTopLevelChange = true;
+            updatedTopLevelQueue = targetQueue;
+            updatedTopLevelSalads = targetSalads;
+            updatedTopLevelProgress = targetCurrentProgress;
+            updatedTopLevelQueueProgress = targetProgressMap;
+            updatedTopLevelQueueIndex = targetCurrentQueueIndex;
+          }
+
+          // Encontrar ID de línea para sincronizar en paralelo
+          const dbLine = lines.find((l) => l.code === lineCode);
+          if (dbLine) {
+            syncPromises.push(syncQueueItems(dbLine.id, targetQueue));
+            syncPromises.push(syncLineState(dbLine.id, true, targetCurrentQueueIndex));
+            if (currentItemInTarget && targetCurrentProgress) {
+              syncPromises.push(syncProgress(currentItemInTarget.id, targetCurrentProgress));
+            }
+          }
+          broadcastLocalChange(lineCode);
+        }
+
+        // Actualizar store inmediatamente
+        set((s) => ({
+          lineStorage: updatedLineStorage,
+          ...(hasTopLevelChange ? {
+            queue: updatedTopLevelQueue,
+            salads: updatedTopLevelSalads,
+            currentProgress: updatedTopLevelProgress,
+            queueProgress: updatedTopLevelQueueProgress,
+            currentQueueIndex: updatedTopLevelQueueIndex,
+            isProducing: true,
+          } : {})
+        }));
+
+        // Esperar sincronizaciones paralelas con Supabase
+        await Promise.allSettled(syncPromises);
+      },
+
       removeSalad: (id) =>
         set((state) => ({
           salads: state.salads.filter((s) => s.id !== id),
@@ -858,14 +985,19 @@ export const useProductionStore = create<ProductionState>()(
         const [moved] = newQueue.splice(fromIndex, 1);
         newQueue.splice(toIndex, 0, moved);
 
+        const updatedLineState = {
+          ...lineState,
+          queue: newQueue,
+        };
+
+        const isCurrentActiveLine = state.activeLineCode === lineCode;
+
         set((s) => ({
           lineStorage: {
             ...s.lineStorage,
-            [lineCode]: {
-              ...lineState,
-              queue: newQueue,
-            },
+            [lineCode]: updatedLineState,
           },
+          ...(isCurrentActiveLine ? { queue: newQueue } : {}),
         }));
 
         const lines = await getProductionLines();
@@ -882,15 +1014,19 @@ export const useProductionStore = create<ProductionState>()(
         if (!lineState) return;
 
         const newQueue = lineState.queue.filter((_, i) => i !== index);
+        const updatedLineState = {
+          ...lineState,
+          queue: newQueue,
+        };
+
+        const isCurrentActiveLine = state.activeLineCode === lineCode;
 
         set((s) => ({
           lineStorage: {
             ...s.lineStorage,
-            [lineCode]: {
-              ...lineState,
-              queue: newQueue,
-            },
+            [lineCode]: updatedLineState,
           },
+          ...(isCurrentActiveLine ? { queue: newQueue } : {}),
         }));
 
         const lines = await getProductionLines();

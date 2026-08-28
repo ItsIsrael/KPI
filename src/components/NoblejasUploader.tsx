@@ -16,6 +16,7 @@ interface NoblejasEntry {
   nombre: string;
   palets: number;
   cajasExtra: number;
+  cajasPorPallet?: number;
 }
 
 interface NoblejasUploaderProps {
@@ -88,12 +89,17 @@ export function NoblejasUploader({ open, onOpenChange, goldMode = false }: Noble
           const rawExtra = Object.entries(row).find(([k]) => /extra/i.test(k) || /pico/i.test(k) || /suelta/i.test(k))?.[1] || "0";
           const cajasExtra = parseInt(String(rawExtra), 10);
 
+          // Buscar si el excel trae columna específica de cajas/palet o base
+          const rawBpp = Object.entries(row).find(([k]) => /cajas.*pal/i.test(k) || /cxp/i.test(k) || /bpp/i.test(k) || /formato/i.test(k))?.[1];
+          const parsedBpp = rawBpp ? parseInt(String(rawBpp), 10) : undefined;
+
           return {
             id: crypto.randomUUID(),
             codigo,
             nombre,
             palets: isNaN(palets) ? 0 : palets,
             cajasExtra: isNaN(cajasExtra) ? 0 : cajasExtra,
+            cajasPorPallet: parsedBpp && !isNaN(parsedBpp) && parsedBpp > 0 ? parsedBpp : undefined,
           };
         }).filter(item => item.codigo && item.codigo.length > 3);
 
@@ -164,32 +170,61 @@ export function NoblejasUploader({ open, onOpenChange, goldMode = false }: Noble
     setEntries(prev => prev.filter(e => e.id !== id));
   };
 
-  const handleSaveToConfig = () => {
-    // Save to the global store noblejasConfig
-    // The noblejasConfig just maps codigo10e -> total cajas
-    // Total cajas = (palets * 64) + cajas extra... wait, boxesPerPallet is dynamic?
-    // We don't know boxesPerPallet until it's matched with a format. 
-    // Wait, the user said "cantidad en palets y si hay cajas extra". 
-    // The current store setNoblejasConfig just saves `boxes`, an absolute integer.
-    // If we only have palets and extra boxes, we might need to assume a default boxes per pallet, OR we store an object.
-    // Let's assume standard 64 boxes per pallet if unknown, or maybe the user just enters exact boxes?
-    // Let's store total = (palets * 64) + cajasExtra as a fallback, but the correct approach is the user provides absolute total boxes.
-    // I will use `(palets * 72)` for Cartón 4/6 as a common default, but we should probably prompt for total boxes.
-    // Wait, let's just do a rough calculation: 72 boxes/pallet for Cartón.
-    
-    const configs: Record<string, number> = {};
-    entries.forEach(entry => {
-      const nombreUpper = entry.nombre.toUpperCase();
-      let boxesPerPallet = 72; // Default para Cartón 4/6
-      
-      if (nombreUpper.includes("LIDL")) {
-        boxesPerPallet = 84;
-      } else if (nombreUpper.includes("ALI")) {
-        boxesPerPallet = 72; // ALI es de 72 cajas
-      } else if (nombreUpper.includes("LL6410")) {
-        boxesPerPallet = 64; // LL6410 es 64 cajas
+  // Helper para buscar cajas por palet del código en colas activas, salads o parsedExcel
+  const findBppForCode = (code: string, name: string): number => {
+    const cleanCode = code.toUpperCase();
+    const state = useProductionStore.getState();
+
+    // 1. Buscar en colas de todas las líneas
+    for (const lineData of Object.values(state.lineStorage)) {
+      const match = lineData.queue.find(q => q.codigo10e?.toUpperCase() === cleanCode);
+      if (match && match.boxesPerPallet && match.boxesPerPallet > 0) {
+        return match.boxesPerPallet;
       }
-      
+    }
+
+    // 2. Buscar en ensaladas top-level
+    for (const s of state.salads) {
+      const fmt = s.formats.find(f => f.codigo10e?.toUpperCase() === cleanCode);
+      if (fmt && fmt.boxesPerPallet && fmt.boxesPerPallet > 0) {
+        return fmt.boxesPerPallet;
+      }
+    }
+
+    // 3. Buscar en Excel parseado pendiente si lo hubiera
+    const excelMatch = state.parsedExcelData.find(item => item.codigo?.toUpperCase() === cleanCode);
+    if (excelMatch && excelMatch.boxesPerPallet && excelMatch.boxesPerPallet > 0) {
+      return excelMatch.boxesPerPallet;
+    }
+
+    // 4. Determinar según nombre (LL6410 -> 64, PV136 -> 64, PV216 -> 36, etc.)
+    const nombreUpper = name.toUpperCase();
+    if (nombreUpper.includes("LL6410") || nombreUpper.includes("LL 6410") || nombreUpper.includes("PV136")) {
+      return 64;
+    }
+    if (nombreUpper.includes("PV216") || nombreUpper.includes("PV 216")) {
+      return 36;
+    }
+    if (nombreUpper.includes("LIDL")) {
+      return 84;
+    }
+
+    // 5. Si es explícitamente cartón
+    if (nombreUpper.includes("CARTON") || nombreUpper.includes("CARTÓN")) {
+      return 72;
+    }
+
+    return 64; // Default estándar para ensaladas plásticas (64 cajas/palet)
+  };
+
+  const handleSaveToConfig = () => {
+    const configs: Record<string, number> = {};
+
+    entries.forEach(entry => {
+      const boxesPerPallet = entry.cajasPorPallet && entry.cajasPorPallet > 0
+        ? entry.cajasPorPallet
+        : findBppForCode(entry.codigo, entry.nombre);
+
       const totalBoxes = (entry.palets * boxesPerPallet) + entry.cajasExtra;
       configs[entry.codigo] = totalBoxes;
     });
@@ -349,22 +384,31 @@ export function NoblejasUploader({ open, onOpenChange, goldMode = false }: Noble
             <div className="space-y-2">
               <h3 className="font-bold border-b pb-2">Lista para Procesar</h3>
               <div className="divide-y divide-gray-200 dark:divide-white/10">
-                {entries.map(entry => (
-                  <div key={entry.id} className="py-2 flex items-center justify-between">
-                    <div>
-                      <p className="font-bold">{entry.nombre} <span className="text-xs opacity-70 ml-2">({entry.codigo})</span></p>
-                      <p className="text-sm opacity-70">Palets: {entry.palets} | Cajas extra: {entry.cajasExtra}</p>
+                {entries.map(entry => {
+                  const bpp = entry.cajasPorPallet && entry.cajasPorPallet > 0 
+                    ? entry.cajasPorPallet 
+                    : findBppForCode(entry.codigo, entry.nombre);
+                  const total = (entry.palets * bpp) + entry.cajasExtra;
+
+                  return (
+                    <div key={entry.id} className="py-2 flex items-center justify-between">
+                      <div>
+                        <p className="font-bold">{entry.nombre} <span className="text-xs opacity-70 ml-2">({entry.codigo})</span></p>
+                        <p className="text-sm opacity-70">
+                          {entry.palets} palet{entry.palets !== 1 ? "s" : ""} × {bpp} cx/pal + {entry.cajasExtra} extra = <strong className={cn(goldMode ? "text-amber-400" : "text-emerald-600")}>{total} cajas</strong>
+                        </p>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => removeEntry(entry.id)}
+                        className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => removeEntry(entry.id)}
-                      className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

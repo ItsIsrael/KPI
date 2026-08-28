@@ -1778,9 +1778,10 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                     const nextNobPico = item.nextItem.noblejas % item.nextItem.boxesPerPallet;
                     const totalPallets = Math.floor(item.nextItem.quantity / item.nextItem.boxesPerPallet);
                     const picoBoxes = item.nextItem.quantity % item.nextItem.boxesPerPallet;
+                    const nextIndex = (item.currentQueueIndex || 0) + 1;
                     return (
                       <div className={cn(
-                        "border rounded-2xl p-3 flex flex-col gap-2 text-xs",
+                        "border rounded-2xl p-3 flex flex-col gap-2 text-xs relative group",
                         goldMode ? "bg-white/[0.01] border-white/5" : "bg-emerald-50/40 border-emerald-600/15"
                       )}>
                         <div className="flex items-center justify-between flex-wrap gap-2">
@@ -1797,6 +1798,34 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                             {item.nextItem.quantity} cajas totales
                           </span>
                         </div>
+
+                        {/* Botones de acción para A CONTINUACIÓN */}
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await useProductionStore.getState().multiLineReorderQueue(item.line.code, nextIndex, nextIndex + 1);
+                              fetchOverview();
+                            }}
+                            disabled={nextIndex >= (item.queue?.length || 0) - 1}
+                            className="p-1 rounded hover:bg-black/10 disabled:opacity-30 transition-colors"
+                            title="Bajar en cola"
+                          >
+                            <span className="text-[10px]">⬇️</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await useProductionStore.getState().multiLineRemoveFromQueue(item.line.code, nextIndex);
+                              fetchOverview();
+                            }}
+                            className="p-1 rounded hover:bg-red-500/20 text-red-500 transition-colors"
+                            title="Eliminar de cola"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
                         <div className="flex items-center gap-2 flex-wrap mt-1">
                           <span className="text-foreground/50 font-normal font-mono bg-foreground/5 px-2 py-0.5 rounded-md">
                             ({totalPallets} pales + {picoBoxes} cajas pico)
@@ -1848,7 +1877,10 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2" onClick={(e) => e.stopPropagation()}>
                                 <button
                                   type="button"
-                                  onClick={() => useProductionStore.getState().multiLineReorderQueue(item.line.code, realIndex, realIndex - 1)}
+                                  onClick={async () => {
+                                    await useProductionStore.getState().multiLineReorderQueue(item.line.code, realIndex, realIndex - 1);
+                                    fetchOverview();
+                                  }}
                                   className="p-1 rounded hover:bg-black/10 transition-colors"
                                   title="Subir"
                                 >
@@ -1856,7 +1888,10 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => useProductionStore.getState().multiLineReorderQueue(item.line.code, realIndex, realIndex + 1)}
+                                  onClick={async () => {
+                                    await useProductionStore.getState().multiLineReorderQueue(item.line.code, realIndex, realIndex + 1);
+                                    fetchOverview();
+                                  }}
                                   disabled={realIndex === (item.queue?.length || 0) - 1}
                                   className="p-1 rounded hover:bg-black/10 disabled:opacity-30 transition-colors"
                                   title="Bajar"
@@ -1865,8 +1900,9 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    useProductionStore.getState().multiLineRemoveFromQueue(item.line.code, realIndex);
+                                  onClick={async () => {
+                                    await useProductionStore.getState().multiLineRemoveFromQueue(item.line.code, realIndex);
+                                    fetchOverview();
                                   }}
                                   className="p-1 rounded hover:bg-red-500/20 text-red-500 transition-colors"
                                   title="Eliminar"

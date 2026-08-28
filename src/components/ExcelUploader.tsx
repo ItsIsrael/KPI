@@ -176,7 +176,7 @@ function mapRecursoToLine(recurso: string): string {
 }
 
 export function ExcelUploader({ open, onOpenChange, goldMode = false }: ExcelUploaderProps) {
-  const { parsedExcelData: parsedData, setParsedExcelData: setParsedData, clearParsedExcelData, addSalad } = useProductionStore();
+  const { parsedExcelData: parsedData, setParsedExcelData: setParsedData, clearParsedExcelData, addSalad, addSaladsBulk } = useProductionStore();
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pendingWarning, setPendingWarning] = useState<{ action: "line" | "selected", target?: string, warnings: string[] } | null>(null);
@@ -396,9 +396,9 @@ export function ExcelUploader({ open, onOpenChange, goldMode = false }: ExcelUpl
 
   const executeAddLine = async (linea: string) => {
     const lineItems = parsedData.filter(item => item.linea === linea && item.selected);
-    for (const item of lineItems) {
-      const noblejasConfig = useProductionStore.getState().noblejasConfig;
+    const noblejasConfig = useProductionStore.getState().noblejasConfig;
 
+    const saladsToBulk = lineItems.map(item => {
       const newFormat: Format = {
         id: generateId(),
         boxType: item.boxType,
@@ -417,17 +417,11 @@ export function ExcelUploader({ open, onOpenChange, goldMode = false }: ExcelUpl
         formats: [newFormat]
       };
 
-      await addSalad(newSalad, item.linea);
-    }
+      return { salad: newSalad, lineCode: item.linea };
+    });
 
-    // Remover solo los que acabamos de cargar de ese panel
-    const remainingData = parsedData.filter(item => !(item.linea === linea && item.selected));
-    setParsedData(remainingData);
-    
-    // Si ya no quedan datos tras cargar esta línea, cerramos el panel
-    if (remainingData.length === 0) {
-      onOpenChange(false);
-    }
+    await addSaladsBulk(saladsToBulk);
+    onOpenChange(false);
   };
 
   const handleAddSelected = async () => {
@@ -454,9 +448,7 @@ export function ExcelUploader({ open, onOpenChange, goldMode = false }: ExcelUpl
     const selectedItems = parsedData.filter(item => item.selected);
     const noblejasConfig = useProductionStore.getState().noblejasConfig;
 
-    // Process items and add them to the queue
-    for (const item of selectedItems) {
-      // Create Format
+    const saladsToBulk = selectedItems.map(item => {
       const newFormat: Format = {
         id: generateId(),
         boxType: item.boxType,
@@ -469,17 +461,16 @@ export function ExcelUploader({ open, onOpenChange, goldMode = false }: ExcelUpl
         codigo10e: item.codigo
       };
 
-      // Create Salad wrapper
       const newSalad: Salad = {
         id: generateId(),
         name: item.nombre,
         formats: [newFormat]
       };
 
-      await addSalad(newSalad, item.linea);
-    }
-    // Remover todos los que acabamos de cargar
-    setParsedData(parsedData.filter(item => !item.selected));
+      return { salad: newSalad, lineCode: item.linea };
+    });
+
+    await addSaladsBulk(saladsToBulk);
     onOpenChange(false);
   };
 
