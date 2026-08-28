@@ -260,11 +260,9 @@ export async function syncQueueItems(lineId: string, queue: QueueItem[]) {
         fecha_caducidad: item.fechaCaducidad || null,
       }));
 
-      const { data, error } = await supabase.from("line_queue_items").upsert(rows, { onConflict: "id" }).select();
+      const { error } = await supabase.from("line_queue_items").upsert(rows, { onConflict: "id" });
       if (error) {
         console.error("Supabase upsert error in syncQueueItems:", error.message, error.details, error.hint);
-      } else {
-        console.log("Supabase upsert SUCCESS in syncQueueItems. Rows returned:", data?.length);
       }
     }
 
@@ -329,17 +327,8 @@ export async function syncProgress(queueItemId: string, progress: FormatProgress
   if (!isSupabaseConfigured || !supabase || queueItemId.startsWith("local-")) return;
 
   try {
-    // Comprobar que el item existe en line_queue_items para evitar error de FK
-    const { data: exists } = await supabase
-      .from("line_queue_items")
-      .select("id")
-      .eq("id", queueItemId)
-      .maybeSingle();
-
-    if (!exists) {
-      return;
-    }
-
+    // Upsert directamente — si el FK falla, el catch lo gestiona silenciosamente.
+    // Eliminamos la consulta SELECT previa que añadía una ronda extra innecesaria.
     const { error } = await supabase.from("queue_item_progress").upsert(
       {
         queue_item_id: queueItemId,
@@ -357,10 +346,10 @@ export async function syncProgress(queueItemId: string, progress: FormatProgress
       { onConflict: "queue_item_id" }
     );
     if (error) {
-      // Silently ignore or handle
+      // FK violation o item no existe → ignorar silenciosamente
     }
   } catch (e) {
-    console.error("Critical error in syncProgress:", e);
+    // Silenciar errores no críticos (ej: item eliminado entre medias)
   }
 }
 
@@ -389,10 +378,16 @@ export async function saveHistoryLog(lineId: string | null, historyItem: History
 export async function getFactoryOverview(): Promise<LineOverview[]> {
   const lines = await getProductionLines();
   
-  const overviewList: LineOverview[] = [];
+  // Cargar todas las líneas EN PARALELO en vez de secuencialmente.
+  // Esto reduce el tiempo total de ~4 round-trips a ~1 (la más lenta).
+  const lineDataResults = await Promise.all(
+    lines.map(async (line) => {
+      const data = await fetchLineData(line.id);
+      return { line, ...data };
+    })
+  );
 
-  for (const line of lines) {
-    const { queue, queueProgress, currentQueueIndex } = await fetchLineData(line.id);
+  return lineDataResults.map(({ line, queue, queueProgress, currentQueueIndex }) => {
     const currentItem = queue[currentQueueIndex];
 
     let totalBoxes = 0;
@@ -438,7 +433,7 @@ export async function getFactoryOverview(): Promise<LineOverview[]> {
       percent = totalBoxes > 0 ? Math.min(Math.round((completedBoxes / totalBoxes) * 100), 100) : 0;
     }
 
-    overviewList.push({
+    return {
       line,
       currentSaladName: currentItem?.saladName,
       currentBoxType: currentItem?.boxType,
@@ -457,15 +452,23 @@ export async function getFactoryOverview(): Promise<LineOverview[]> {
       calc: currentCalc,
       progress: currentProg,
       queue,
-    });
-  }
-
-  return overviewList;
+    };
+  });
 }
 
 // ============================================================
 // 5. SUSCRIPCIONES REALTIME (WEBSOCKETS)
 // ============================================================
+
+// Utilidad de debounce para evitar ráfagas de callbacks en suscripciones realtime.
+// Agrupa múltiples eventos que llegan en menos de `delayMs` en una sola ejecución.
+function debounce(fn: () => void, delayMs: number): () => void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => { timer = null; fn(); }, delayMs);
+  };
+}
 
 export function subscribeToLineChanges(
   lineId: string,
@@ -475,26 +478,26 @@ export function subscribeToLineChanges(
     return () => {};
   }
 
+  const debouncedChange = debounce(onLineChange, 300);
+
   const channel = supabase
     .channel(`line-realtime-${lineId}`)
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "production_lines", filter: `id=eq.${lineId}` },
-      (payload) => { console.log("Line change: production_lines", payload); onLineChange(); }
+      () => debouncedChange()
     )
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "line_queue_items", filter: `line_id=eq.${lineId}` },
-      (payload) => { console.log("Line change: line_queue_items", payload); onLineChange(); }
+      () => debouncedChange()
     )
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "queue_item_progress" },
-      (payload) => { console.log("Line change: queue_item_progress", payload); onLineChange(); }
+      () => debouncedChange()
     )
-    .subscribe((status) => {
-      console.log(`Line Channel status [${lineId}]:`, status);
-    });
+    .subscribe();
 
   return () => {
     supabase?.removeChannel(channel);
@@ -506,26 +509,26 @@ export function subscribeToGlobalChanges(onGlobalChange: () => void) {
     return () => {};
   }
 
+  const debouncedChange = debounce(onGlobalChange, 300);
+
   const channel = supabase
     .channel('global-realtime')
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "production_lines" },
-      (payload) => { console.log("Global change: production_lines", payload); onGlobalChange(); }
+      () => debouncedChange()
     )
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "line_queue_items" },
-      (payload) => { console.log("Global change: line_queue_items", payload); onGlobalChange(); }
+      () => debouncedChange()
     )
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "queue_item_progress" },
-      (payload) => { console.log("Global change: queue_item_progress", payload); onGlobalChange(); }
+      () => debouncedChange()
     )
-    .subscribe((status) => {
-      console.log("Global Channel status:", status);
-    });
+    .subscribe();
 
   return () => {
     supabase?.removeChannel(channel);
