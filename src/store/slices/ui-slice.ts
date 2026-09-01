@@ -22,9 +22,14 @@ export const createUiSlice: StateCreator<
   palletSpeeds: [],
   ambientMode: false,
   editingQueueItemId: null,
-  authUser: null,
-  isLoggedIn: false,
-  currentUser: null,
+  authUser: {
+    id: "planta-op",
+    email: "operador@planta.local",
+    username: "Operador Planta",
+    role: "admin",
+  },
+  isLoggedIn: true,
+  currentUser: "Operador Planta",
   customDayLabelIndex: null,
   isScreenLocked: false,
 

@@ -746,10 +746,6 @@ export default function Home() {
     );
   }
 
-  if (!isLoggedIn) {
-    return <LoginScreen />;
-  }
-
   if (ambientMode && isProducing) {
     return <AmbientMode />;
   }

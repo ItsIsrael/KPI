@@ -57,23 +57,53 @@ export function createAdminSupabaseClient() {
  * Valida un header Authorization ("Bearer <token>") y devuelve el usuario autenticado.
  */
 export async function verifyUserToken(authHeader: string | null) {
+  // Si no se envía cabecera de autenticación (login desactivado), permitir operación como operador de planta
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return { user: null, error: "Missing or invalid authorization header" };
+    return {
+      user: {
+        id: "plant-operator",
+        email: "operador@planta.local",
+        role: "operator" as const,
+      },
+      error: null,
+    };
   }
 
   const token = authHeader.replace("Bearer ", "").trim();
   if (!token) {
-    return { user: null, error: "Empty token" };
+    return {
+      user: {
+        id: "plant-operator",
+        email: "operador@planta.local",
+        role: "operator" as const,
+      },
+      error: null,
+    };
   }
 
   const client = createServerSupabaseClient(token);
   if (!client) {
-    return { user: null, error: "Supabase server is not configured" };
+    return {
+      user: {
+        id: "plant-operator",
+        email: "operador@planta.local",
+        role: "operator" as const,
+      },
+      error: null,
+    };
   }
 
   const { data: { user }, error } = await client.auth.getUser(token);
   if (error || !user) {
-    return { user: null, error: error?.message || "Invalid or expired token" };
+    // Fallback permisivo si el token caducó mientras el login está desactivado
+    return {
+      user: {
+        id: "plant-operator",
+        email: "operador@planta.local",
+        role: "operator" as const,
+      },
+      error: null,
+    };
   }
 
   // Extraer rol desde app_metadata o user_metadata (default 'operator')
