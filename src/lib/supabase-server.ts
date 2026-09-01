@@ -7,8 +7,11 @@ function cleanSupabaseUrl(url: string): string {
   return cleaned;
 }
 
-const supabaseUrl = cleanSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL || "");
-const supabaseAnonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").trim();
+const DEFAULT_SUPABASE_URL = "https://tsoenhuppyevmayyudui.supabase.co";
+const DEFAULT_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzb2VuaHVwcHlldm1heXl1ZHVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzMTQ5NzcsImV4cCI6MjEwMTg5MDk3N30.SylLuiKrvi39l5g2JoX_vZLsm1M9l5mXsCQjRM9y5cw";
+
+const supabaseUrl = cleanSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL);
+const supabaseAnonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_KEY).trim();
 const supabaseServiceRoleKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
 
 /**
