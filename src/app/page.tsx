@@ -25,8 +25,11 @@ import { MultiLineDashboard } from "@/components/MultiLineDashboard";
 import { QuickQueueBuilder } from "@/components/QuickQueueBuilder";
 import { VersionNotifier } from "@/components/VersionNotifier";
 import { BroadcastListener } from "@/components/BroadcastAlerts";
+import { QualityReminder } from "@/components/QualityReminder";
 import { subscribeToLineChanges } from "@/lib/supabase-service";
 import { useTabClock } from "@/hooks/useTabClock";
+import { supabase } from "@/lib/supabase";
+import { getActiveUserProfile, isAdminRole } from "@/lib/auth";
 
 export default function Home() {
   useTabClock();
@@ -59,6 +62,7 @@ export default function Home() {
     wipeAllData,
     hardResetDatabase,
     clearQueueAndSalads,
+    authUser,
     isLoggedIn,
     logout,
     advanceToNext,
@@ -129,6 +133,37 @@ export default function Home() {
   useEffect(() => {
     loadActiveLineData();
   }, [activeLineCode]);
+
+  // Cargar noblejasConfig, sesión de Supabase Auth y datos al montar
+  useEffect(() => {
+    // 1. Restaurar sesión activa de Supabase Auth si existe
+    getActiveUserProfile().then((profile) => {
+      if (profile) {
+        useProductionStore.getState().setAuthUser(profile);
+      }
+    });
+
+    // 2. Suscribirse a cambios en el estado de autenticación (login/logout/token refresh)
+    if (supabase) {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (session?.user) {
+          getActiveUserProfile().then((profile) => {
+            if (profile) {
+              useProductionStore.getState().setAuthUser(profile);
+            }
+          });
+        } else {
+          useProductionStore.getState().setAuthUser(null);
+        }
+      });
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
+
+    useProductionStore.getState().loadAllLinesData();
+  }, []);
 
   useEffect(() => {
     if (!activeLineId || activeLineCode === "ALL") return;
@@ -597,19 +632,19 @@ export default function Home() {
         <div className="flex-1">
           <button
             onClick={() => {
-              const pwd = window.prompt("Introduce la contraseña de administrador para forzar el borrado de la base de datos de esta línea:");
-              if (pwd === "piloto") {
-                if (window.confirm("⚠️ ADVERTENCIA: Esto borrará por completo la base de datos de esta línea. ¿Estás seguro?")) {
-                  hardResetDatabase();
-                }
-              } else if (pwd !== null) {
-                alert("Contraseña incorrecta.");
+              if (!isAdminRole(authUser?.role)) {
+                alert("⛔ Acción restringida: Solo los usuarios con rol Administrador pueden realizar un borrado de la base de datos.");
+                return;
+              }
+
+              if (window.confirm("⚠️ ADVERTENCIA DE ADMINISTRADOR: ¿Estás seguro de que deseas forzar el borrado completo de los datos de esta línea en la base de datos?")) {
+                hardResetDatabase();
               }
             }}
             className="px-3 py-1.5 rounded-lg border border-red-500/20 bg-red-500/5 text-red-500/50 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 transition-all cursor-pointer font-semibold shadow-sm"
-            title="Forzar borrado de la base de datos (Requiere contraseña)"
+            title="Borrado Forzado de Base de Datos (Solo Administrador)"
           >
-            Borrado Forzado DB
+            Borrado Forzado DB (Admin)
           </button>
         </div>
         <div className="flex-1 flex justify-center">
@@ -728,6 +763,7 @@ export default function Home() {
     >
       <VersionNotifier goldMode={goldMode} />
       <BroadcastListener goldMode={goldMode} currentLineCode={activeLineCode} />
+      <QualityReminder goldMode={goldMode} />
       {goldMode && isProducing && currentProgress?.finished && <GoldConfetti />}
       {/* Background ambient glows */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 select-none opacity-80 glass-bg-blobs">

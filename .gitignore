@@ -40,4 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-.vercel
+# local test & scratch files
+*.txt
+test_*.xlsx
+check-db.js
+create_test_excel.js
+test-supabase-not.js

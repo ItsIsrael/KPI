@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { LineOverview, FormatProgress, Salad, QueueItem, HistoryItem } from "@/types/types";
 import { calculateFormat, DEFAULT_BOX_TYPES, generateId, DEFAULT_SALADS } from "@/types/types";
 import { getFactoryOverview, syncProgress, syncLineState, syncQueueItems, saveHistoryLog, subscribeToGlobalChanges } from "@/lib/supabase-service";
+import { getAuthAccessToken } from "@/lib/auth";
 
 function extractSaladSpecs(name?: string) {
   if (!name) return { weight: null, promoPrice: null, isPromo: false, cleanName: "" };
@@ -212,13 +213,13 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
         const local = localStore.lineStorage[o.line.code];
         if (local && local.queue && local.queue.length > 0) {
           const currentItem = local.queue[local.currentQueueIndex] || local.queue[0];
-          const localProg = currentItem ? local.queueProgress[currentItem.id] : undefined;
-          const isLocalRecent = localProg?.palletLastUpdated && (Date.now() - localProg.palletLastUpdated < 5000);
+          const localProg = currentItem ? local.queueProgress?.[currentItem.id] : undefined;
 
-          if (!isLocalRecent) {
-            return o;
-          }
-
+          // Siempre priorizar datos locales cuando hay cola local con items.
+          // Esto evita que items recién creados desaparezcan si Supabase aún no
+          // ha terminado de escribirlos cuando el dashboard hace fetch.
+          // Si Supabase tiene datos más completos (ej: progreso actualizado desde otro PC),
+          // se usarán los de Supabase solo si la cola local está vacía.
           const prog = localProg;
 
           if (currentItem && prog) {
@@ -257,6 +258,23 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
               nextItem: local.queue[local.currentQueueIndex + 1] || o.nextItem,
               calc,
               progress: prog,
+              queue: local.queue,
+              line: {
+                ...o.line,
+                isProducing: local.isProducing ?? o.line.isProducing,
+              },
+            };
+          } else if (currentItem) {
+            // Tiene item pero aún sin progreso — al menos mostrar la cola y el nombre
+            return {
+              ...o,
+              currentSaladName: currentItem.saladName,
+              currentBoxType: currentItem.boxType,
+              currentLote: currentItem.lote,
+              queueLength: Math.max(o.queueLength, local.queue.length),
+              pendingCount: Math.max(0, local.queue.length - local.currentQueueIndex - 1),
+              currentItem,
+              nextItem: local.queue[local.currentQueueIndex + 1] || o.nextItem,
               queue: local.queue,
               line: {
                 ...o.line,
@@ -1094,13 +1112,35 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
             const completed = prog.completedPallets;
             const total = totalMilagroPallets;
             setAiAlerts(prev => ({ ...prev, [lineCode]: { message: "", level: "critical", firedAt: now } }));
-            fetch("/api/anomaly", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ lineCode, saladName, expectedMinutes: estimatedPalletMinutes, elapsedMinutes: minutesSinceLastPallet, completedPallets: completed, totalPallets: total })
-            }).then(r => r.json()).then(data => {
-              setAiAlerts(prev => ({ ...prev, [lineCode]: { message: data.message || "", level: data.level || "critical", firedAt: now } }));
-            }).catch(() => {});
+            getAuthAccessToken().then((token) => {
+              fetch("/api/anomaly", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({
+                  lineCode,
+                  saladName,
+                  expectedMinutes: estimatedPalletMinutes,
+                  elapsedMinutes: minutesSinceLastPallet,
+                  completedPallets: completed,
+                  totalPallets: total,
+                }),
+              })
+                .then((r) => r.json())
+                .then((data) => {
+                  setAiAlerts((prev) => ({
+                    ...prev,
+                    [lineCode]: {
+                      message: data.message || "",
+                      level: data.level || "critical",
+                      firedAt: now,
+                    },
+                  }));
+                })
+                .catch(() => {});
+            });
           }
           // Limpiar alerta si la línea se normaliza
           if (!isDelayWarning && existingAlert) {

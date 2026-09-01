@@ -5,9 +5,10 @@ import { useProductionStore } from "@/store/production-store";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Lock, User, Eye, EyeOff, LogIn } from "lucide-react";
+import { signInWithSupabase } from "@/lib/auth";
 
 export function LoginScreen() {
-  const login = useProductionStore((state) => state.login);
+  const setAuthUser = useProductionStore((state) => state.setAuthUser);
   const goldMode = useProductionStore((state) => state.goldMode);
   
   const [username, setUsername] = useState("");
@@ -18,25 +19,30 @@ export function LoginScreen() {
   const [shake, setShake] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
 
     setError(null);
     setIsSubmitting(true);
 
-    // Pequeño retardo de 400ms para simular autenticación y mejorar experiencia visual
-    setTimeout(() => {
-      const success = login(username, password);
-      setIsSubmitting(false);
-      
-      if (!success) {
-        setError("Usuario o contraseña incorrectos");
+    try {
+      const { user, error: authError } = await signInWithSupabase(username, password);
+
+      if (authError || !user) {
+        setError(authError || "Error al iniciar sesión");
         setShake(true);
-        // Quitar la animación de sacudida tras 500ms
         setTimeout(() => setShake(false), 500);
+      } else {
+        setAuthUser(user);
       }
-    }, 400);
+    } catch {
+      setError("Error de conexión con el servidor de autenticación");
+      setShake(true);
+      setTimeout(() => setShake(false), 500);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

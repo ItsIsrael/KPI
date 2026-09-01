@@ -1,69 +1,121 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import { verifyUserToken } from "@/lib/supabase-server";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limiter";
+import { OcrRequestSchema, ExtractedOcrResultSchema } from "@/lib/validators";
 
 let openai: OpenAI | null = null;
 
-try {
-  if (process.env.OPENAI_API_KEY) {
+function getOpenAIClient(): OpenAI | null {
+  const key = process.env.OPENAI_API_KEY?.trim();
+  if (!key) return null;
+  if (!openai) {
     openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: key,
+      timeout: 25000,
+      maxRetries: 1,
     });
   }
-} catch (e) {
-  console.warn("Failed to initialize OpenAI client at build time:", e);
+  return openai;
 }
 
-export const maxDuration = 60; // Allow more time for OpenAI Vision API
+export const maxDuration = 45;
 
 export async function POST(req: Request) {
   try {
-    const { image } = await req.json();
+    // 1. Verificación de Autenticación y Autorización
+    const authHeader = req.headers.get("authorization");
+    const { user, error: authError } = await verifyUserToken(authHeader);
 
-    if (!image) {
-      return NextResponse.json({ error: "No image provided" }, { status: 400 });
-    }
-
-    if (!openai || !process.env.OPENAI_API_KEY) {
+    if (authError || !user) {
       return NextResponse.json(
-        { error: "OpenAI API Key is not configured. Add OPENAI_API_KEY to your .env.local file." },
-        { status: 500 }
+        { error: "No autorizado. Se requiere iniciar sesión para acceder al servicio OCR." },
+        { status: 401 }
       );
     }
 
-    const response = await openai.chat.completions.create({
+    // 2. Rate Limiting por usuario / IP (máximo 10 peticiones por minuto)
+    const clientIp = getClientIp(req);
+    const rateLimitKey = `ocr:${user.id || clientIp}`;
+    const rateLimit = checkRateLimit(rateLimitKey, {
+      windowMs: 60 * 1000,
+      maxRequests: 10,
+    });
+
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { error: "Has superado el límite de solicitudes OCR por minuto. Por favor, espera unos segundos." },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": Math.ceil((rateLimit.resetTime - Date.now()) / 1000).toString(),
+            "X-RateLimit-Limit": rateLimit.totalLimit.toString(),
+            "X-RateLimit-Remaining": "0",
+          },
+        }
+      );
+    }
+
+    // 3. Validación de Payload con Zod
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Cuerpo de solicitud JSON inválido" }, { status: 400 });
+    }
+
+    const parseResult = OcrRequestSchema.safeParse(body);
+    if (!parseResult.success) {
+      const issues = parseResult.error.issues.map((i) => i.message).join(", ");
+      return NextResponse.json({ error: `Validación fallida: ${issues}` }, { status: 400 });
+    }
+
+    const { image } = parseResult.data;
+
+    // 4. Verificación de cliente OpenAI configurado
+    const client = getOpenAIClient();
+    if (!client) {
+      return NextResponse.json(
+        { error: "El servicio de Inteligencia Artificial OCR no está configurado en el servidor." },
+        { status: 503 }
+      );
+    }
+
+    // 5. Llamada segura a OpenAI con timeout controlado
+    const response = await client.chat.completions.create({
       model: "gpt-4o",
       messages: [
         {
           role: "system",
-          content: `Eres un experto planificador de producción industrial. Tu tarea es analizar una foto de una hoja de planificación de fábrica (una fotocopia de un Excel con Órdenes de Fabricación) y extraer estructuradamente las ensaladas a producir y sus respectivos formatos (tipos de caja, cantidades, lotes).
+          content: `Eres un experto planificador de producción industrial. Tu tarea es analizar una foto de una hoja de planificación de fábrica (fotocopia de un Excel con Órdenes de Fabricación) y extraer estructuradamente las ensaladas a producir y sus respectivos formatos.
 
-Ten en cuenta que la tabla de la fotocopia tiene típicamente esta estructura de columnas, de izquierda a derecha:
-1. Código 10d (Código interno de la ensalada, ej. 10d477)
-2. Código 10E (Código interno del formato/caja, ej. 10E123)
-3. Nombre de la Ensalada (Ej. "César", "Pasta", etc.)
-4. Cantidad (Número total de cajas a producir)
+Columnas típicas de izquierda a derecha:
+1. Código 10d (Código interno)
+2. Código 10E (Código de formato, ej. 10E123)
+3. Nombre de la Ensalada (Ej. "César", "Pasta")
+4. Cantidad (Número total de cajas)
 5. Tipo de caja (Ej. "Cartón 4", "Cartón 6", "Plástico")
-6. Línea de producción (Ej. "Mondini 00", "K01", "K03", etc.) si se indica en la hoja.
+6. Línea de producción (Ej. "K01", "K03")
 
-Reglas de extracción:
-1. Asocia correctamente cada "Nombre de la Ensalada" con su "Cantidad" y "Tipo de caja" correspondientes leyendo la fila de izquierda a derecha. Fíjate muy bien que el tipo de caja suele venir pegado al nombre de la ensalada.
-2. Extrae el código "10E" si aparece en la misma fila y guárdalo en "codigo10e" siempre en mayúsculas (ej. "10E123"). Si no hay, déjalo vacío o no lo incluyas.
-3. Si ves menciones a "Noblejas" separadas o como columnas adicionales, anota la cantidad. Si no, pon 0.
-4. Si encuentras un lote de producción (ej. L-1234), anótalo. Si hay un lote, asume cambioLote: true.
-5. Identifica la línea de producción a la que corresponde la orden si aparece especificada (ej. Mondini 00, K01, K03) y asígnala al campo "linea".
+Reglas estrictas:
+1. Asocia cada ensalada con su cantidad y tipo de caja.
+2. Extrae el código 10E en mayúsculas.
+3. Si hay mención a Noblejas, anota la cantidad (si no, 0).
+4. Si hay lote, anótalo y marca cambioLote: true.
+5. Identifica la línea (K00, K01, K02, K03) si aparece.
 
-Devuelve EXACTAMENTE Y ÚNICAMENTE un objeto JSON válido con la siguiente estructura estricta:
+Devuelve EXACTAMENTE un objeto JSON con la estructura:
 {
   "salads": [
     {
-      "name": "NOMBRE ENSALADA EN MAYÚSCULAS",
+      "name": "NOMBRE ENSALADA",
       "formats": [
         {
-          "boxType": "Tipo de Caja (Ej. Cartón 4)",
+          "boxType": "Cartón 4",
           "quantity": 100,
           "noblejas": 0,
-          "boxesPerPallet": 80,
-          "lote": "L-1234A",
+          "boxesPerPallet": 70,
+          "lote": "L-1234",
           "cambioLote": true,
           "linea": "K01",
           "codigo10e": "10E123"
@@ -71,17 +123,12 @@ Devuelve EXACTAMENTE Y ÚNICAMENTE un objeto JSON válido con la siguiente estru
       ]
     }
   ]
-}
-
-Asegúrate de que 'boxesPerPallet' tenga un valor por defecto realista (ej. 70 o 80) dependiendo del tipo de caja, si no aparece explícitamente.`
+}`,
         },
         {
           role: "user",
           content: [
-            {
-              type: "text",
-              text: "Extrae las órdenes de fabricación de esta hoja."
-            },
+            { type: "text", text: "Extrae las órdenes de fabricación de esta imagen." },
             {
               type: "image_url",
               image_url: {
@@ -92,14 +139,33 @@ Asegúrate de que 'boxesPerPallet' tenga un valor por defecto realista (ej. 70 o
         },
       ],
       response_format: { type: "json_object" },
+      max_tokens: 2500,
     });
 
-    const content = response.choices[0].message.content;
-    const parsed = JSON.parse(content || "{}");
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      return NextResponse.json({ salads: [] });
+    }
 
-    return NextResponse.json(parsed);
-  } catch (error: any) {
-    console.error("OCR API Error:", error);
-    return NextResponse.json({ error: error.message || "Error procesando la imagen" }, { status: 500 });
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      return NextResponse.json({ error: "Respuesta de IA no estructurada" }, { status: 502 });
+    }
+
+    const validatedResult = ExtractedOcrResultSchema.safeParse(parsed);
+    if (!validatedResult.success) {
+      return NextResponse.json({ salads: [] });
+    }
+
+    return NextResponse.json(validatedResult.data);
+  } catch (error: unknown) {
+    // Registro de error seguro en servidor sin filtrar detalles al cliente
+    console.error("Error en endpoint /api/ocr:", error instanceof Error ? error.message : "Error desconocido");
+    return NextResponse.json(
+      { error: "Ocurrió un error al procesar la imagen con OCR. Inténtalo de nuevo." },
+      { status: 500 }
+    );
   }
 }

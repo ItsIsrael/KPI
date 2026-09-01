@@ -23,7 +23,11 @@ import {
   hardResetLine,
   syncPendingExcelData,
   fetchPendingExcelData,
+  syncNoblejasConfig,
+  fetchNoblejasConfig,
 } from "@/lib/supabase-service";
+import type { AuthUserProfile } from "@/lib/auth";
+import { signOutSupabase } from "@/lib/auth";
 
 // Canal de sincronización local instantánea entre pestañas/monitores (<10ms)
 const localSyncChannel = typeof window !== "undefined" && "BroadcastChannel" in window
@@ -162,12 +166,13 @@ interface ProductionState {
   palletSpeeds: number[]; // Velocidades instantáneas de paletizado (cajas/minuto)
   ambientMode: boolean; // Modo Ambiente a pantalla completa
   editingQueueItemId: string | null; // ID del elemento de la cola en edición
+  authUser: AuthUserProfile | null; // Perfil autenticado real
   isLoggedIn: boolean; // Estado de autenticación
   currentUser: string | null; // Operador actual
   customDayLabelIndex: number | null; // Selector manual de día / color de etiqueta (Gold / Planta)
   isScreenLocked: boolean; // Modo Bloqueo Táctil de Pantalla (Glove-lock)
-  login: (username: string, password: string) => boolean;
-  logout: () => void;
+  setAuthUser: (user: AuthUserProfile | null) => void;
+  logout: () => Promise<void>;
   setCustomDayLabelIndex: (index: number | null) => void;
   toggleScreenLock: () => void;
 
@@ -258,6 +263,12 @@ function formatDuration(ms: number): string {
 
 let currentLoadRequestId = 0;
 
+// Timestamp de la última escritura local por línea para proteger contra race conditions
+// con el realtime de Supabase. Cuando un realtime llega con datos vacíos pero
+// la escritura local fue hace <10s, no sobreescribimos.
+const lastLocalWriteTs: Record<string, number> = {};
+const LOCAL_WRITE_PROTECTION_MS = 10_000; // 10 segundos de protección
+
 export const useProductionStore = create<ProductionState>()(
   persist(
     (set, get) => ({
@@ -284,7 +295,11 @@ export const useProductionStore = create<ProductionState>()(
         }
 
         set({ activeLineCode: code });
-        if (code === "ALL") return;
+        if (code === "ALL") {
+          // Cargar datos de todas las líneas desde Supabase al entrar al Dashboard
+          await get().loadAllLinesData();
+          return;
+        }
 
         // Restaurar inmediatamente el estado de la línea seleccionada (0ms de latencia)
         const saved = get().lineStorage[code];
@@ -377,19 +392,28 @@ export const useProductionStore = create<ProductionState>()(
                 lineStorage: { ...s.lineStorage, [activeLineCode]: lineState },
               }));
             } else {
-              // La línea realmente está vacía y no tiene cola local (o fue borrada en la BD)
-              const emptyState = {
-                queue: [],
-                salads: [],
-                queueProgress: {},
-                currentQueueIndex: 0,
-                isProducing: false,
-                currentProgress: null,
-              };
-              set((s) => ({
-                ...emptyState,
-                lineStorage: { ...s.lineStorage, [activeLineCode]: emptyState },
-              }));
+              // Supabase devolvió cola vacía — proteger contra race condition
+              // Si la escritura local fue reciente (<10s), no sobreescribir datos locales
+              const lastWrite = lastLocalWriteTs[activeLineCode] || 0;
+              const localHasData = get().queue.length > 0 || (get().lineStorage[activeLineCode]?.queue?.length || 0) > 0;
+              const isProtected = localHasData && (Date.now() - lastWrite < LOCAL_WRITE_PROTECTION_MS);
+
+              if (!isProtected) {
+                const emptyState = {
+                  queue: [],
+                  salads: [],
+                  queueProgress: {},
+                  currentQueueIndex: 0,
+                  isProducing: false,
+                  currentProgress: null,
+                };
+                set((s) => ({
+                  ...emptyState,
+                  lineStorage: { ...s.lineStorage, [activeLineCode]: emptyState },
+                }));
+              } else {
+                console.log(`[loadActiveLineData] Protegido: Supabase devolvió vacío pero hay datos locales recientes para ${activeLineCode}`);
+              }
             }
           }
         } catch (e) {
@@ -462,16 +486,39 @@ export const useProductionStore = create<ProductionState>()(
           // Hydrate pending Excel data from Supabase
           const remotePendingExcel = await fetchPendingExcelData();
           
+          // Cargar configuración de Noblejas desde Supabase (sincronizada entre PCs)
+          const remoteNoblejasConfig = await fetchNoblejasConfig();
+          
           set((s) => {
-            if (remotePendingExcel && remotePendingExcel.length > 0) {
-              return {
-                lineStorage: { ...s.lineStorage, ...newLineStorage },
-                parsedExcelData: remotePendingExcel
-              };
+            // Proteger: no sobreescribir lineStorage local con datos vacíos de Supabase
+            // si la línea tiene datos locales recientes (protección contra race conditions)
+            const mergedLineStorage = { ...s.lineStorage };
+            for (const [lineCode, remoteData] of Object.entries(newLineStorage)) {
+              const localData = s.lineStorage[lineCode];
+              const lastWrite = lastLocalWriteTs[lineCode] || 0;
+              const localHasData = localData?.queue?.length > 0;
+              const remoteHasData = remoteData.queue?.length > 0;
+              const isProtected = localHasData && !remoteHasData && (Date.now() - lastWrite < LOCAL_WRITE_PROTECTION_MS);
+              
+              if (!isProtected) {
+                mergedLineStorage[lineCode] = remoteData;
+              }
             }
-            return {
-              lineStorage: { ...s.lineStorage, ...newLineStorage }
+
+            const updates: Partial<ProductionState> = {
+              lineStorage: mergedLineStorage,
             };
+            
+            if (remotePendingExcel && remotePendingExcel.length > 0) {
+              updates.parsedExcelData = remotePendingExcel;
+            }
+            
+            // Merge noblejasConfig: remote tiene prioridad, pero mantener config local si remote está vacío
+            if (remoteNoblejasConfig && Object.keys(remoteNoblejasConfig).length > 0) {
+              updates.noblejasConfig = remoteNoblejasConfig;
+            }
+            
+            return updates as any;
           });
         } catch (e) {
           console.error("Error loading all lines data:", e);
@@ -512,6 +559,9 @@ export const useProductionStore = create<ProductionState>()(
           lineStorage: newLineStorage,
         });
 
+        // Sincronizar noblejasConfig con Supabase para que todos los PCs lo vean
+        syncNoblejasConfig(newNoblejasConfig);
+
         const { syncQueueItems, getProductionLines } = await import("@/lib/supabase-service");
         
         if (linesToSync.length > 0) {
@@ -533,11 +583,13 @@ export const useProductionStore = create<ProductionState>()(
            });
         }
       },
-      removeNoblejasConfig: (codigo10e) => set((s) => {
-        const newConfig = { ...s.noblejasConfig };
+      removeNoblejasConfig: (codigo10e) => {
+        const newConfig = { ...get().noblejasConfig };
         delete newConfig[codigo10e];
-        return { noblejasConfig: newConfig };
-      }),
+        set({ noblejasConfig: newConfig });
+        // Sincronizar con Supabase
+        syncNoblejasConfig(newConfig);
+      },
 
       // Estado inicial
       parsedExcelData: [],
@@ -571,7 +623,8 @@ export const useProductionStore = create<ProductionState>()(
       history: [],
       templates: [],
       editingQueueItemId: null,
-      isLoggedIn: true,
+      authUser: null,
+      isLoggedIn: false,
       currentUser: null,
       customDayLabelIndex: null,
       isScreenLocked: false,
@@ -649,6 +702,9 @@ export const useProductionStore = create<ProductionState>()(
             },
           }));
 
+          // Marcar timestamp de escritura local para proteger contra race conditions
+          lastLocalWriteTs[lineCodeToUse] = Date.now();
+
           // Sincronización completa con Supabase
           console.log(`[addSalad] Calling syncQueueItems with lineIdToUse=${lineIdToUse}, updatedQueue length=${updatedQueue.length}`);
           if (lineIdToUse) {
@@ -699,6 +755,9 @@ export const useProductionStore = create<ProductionState>()(
               [lineCodeToUse]: targetLineState,
             },
           }));
+
+          // Marcar timestamp de escritura local
+          lastLocalWriteTs[lineCodeToUse] = Date.now();
 
           if (lineIdToUse) {
             await syncQueueItems(lineIdToUse, targetQueue);
@@ -817,6 +876,8 @@ export const useProductionStore = create<ProductionState>()(
               syncPromises.push(syncProgress(currentItemInTarget.id, targetCurrentProgress));
             }
           }
+          // Marcar timestamp de escritura local
+          lastLocalWriteTs[lineCode] = Date.now();
           broadcastLocalChange(lineCode);
         }
 
@@ -1813,13 +1874,22 @@ export const useProductionStore = create<ProductionState>()(
       setEditingQueueItemId: (id) =>
         set({ editingQueueItemId: id }),
 
-      login: (_username, _password) => {
-        set({ isLoggedIn: true, currentUser: _username });
-        return true;
+      setAuthUser: (user) => {
+        set({
+          authUser: user,
+          isLoggedIn: Boolean(user),
+          currentUser: user ? user.username : null,
+        });
       },
 
-      logout: () =>
-        set({ isLoggedIn: false, currentUser: null }),
+      logout: async () => {
+        await signOutSupabase();
+        set({
+          authUser: null,
+          isLoggedIn: false,
+          currentUser: null,
+        });
+      },
 
       updateQueueItem: async (id, updates) => {
         const state = get();
@@ -1995,10 +2065,17 @@ export const useProductionStore = create<ProductionState>()(
     }),
     {
       name: "salad-production-storage",
+      partialize: (state) => {
+        // Excluir información de sesión de usuario del localStorage persistente
+        const { authUser: _a, isLoggedIn: _i, currentUser: _c, ...rest } = state;
+        return rest;
+      },
       merge: (persistedState: unknown, currentState) => ({
         ...currentState,
         ...(persistedState as object),
-        isLoggedIn: true,
+        authUser: null,
+        isLoggedIn: false,
+        currentUser: null,
       }),
     }
   )

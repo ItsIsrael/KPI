@@ -4,7 +4,8 @@ import type {
   QueueItem, 
   FormatProgress, 
   HistoryItem,
-  LineOverview
+  LineOverview,
+  ParsedExcelRow
 } from "@/types/types";
 import { DEFAULT_PRODUCTION_LINES, calculateFormat } from "@/types/types";
 
@@ -578,7 +579,7 @@ export async function clearAllQueuesAndLines(): Promise<void> {
 // 4. CONFIGURACIÓN GLOBAL (EXCEL PENDIENTE)
 // ============================================================
 
-export async function syncPendingExcelData(data: any[]): Promise<void> {
+export async function syncPendingExcelData(data: ParsedExcelRow[]): Promise<void> {
   if (!isSupabaseConfigured || !supabase) return;
   try {
     const { error } = await supabase
@@ -597,7 +598,7 @@ export async function syncPendingExcelData(data: any[]): Promise<void> {
   }
 }
 
-export async function fetchPendingExcelData(): Promise<any[]> {
+export async function fetchPendingExcelData(): Promise<ParsedExcelRow[]> {
   if (!isSupabaseConfigured || !supabase) return [];
   try {
     const { data, error } = await supabase
@@ -612,11 +613,58 @@ export async function fetchPendingExcelData(): Promise<any[]> {
     }
     
     if (data && data.value) {
-      return Array.isArray(data.value) ? data.value : [];
+      return Array.isArray(data.value) ? (data.value as ParsedExcelRow[]) : [];
     }
     return [];
   } catch (e) {
     console.error("Exception fetching pending excel data:", e);
     return [];
+  }
+}
+
+// ============================================================
+// 6. CONFIGURACIÓN DE NOBLEJAS (SINCRONIZADA ENTRE PCS)
+// ============================================================
+
+export async function syncNoblejasConfig(config: Record<string, number>): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) return;
+  try {
+    const { error } = await supabase
+      .from("global_settings")
+      .upsert({
+        id: "noblejas_config",
+        value: config,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "id" });
+      
+    if (error) {
+      console.error("Error syncing noblejas config to Supabase:", error);
+    }
+  } catch (e) {
+    console.error("Exception syncing noblejas config:", e);
+  }
+}
+
+export async function fetchNoblejasConfig(): Promise<Record<string, number>> {
+  if (!isSupabaseConfigured || !supabase) return {};
+  try {
+    const { data, error } = await supabase
+      .from("global_settings")
+      .select("value")
+      .eq("id", "noblejas_config")
+      .single();
+      
+    if (error && error.code !== 'PGRST116') {
+      console.warn("Error fetching noblejas config from Supabase:", error);
+      return {};
+    }
+    
+    if (data && data.value && typeof data.value === "object" && !Array.isArray(data.value)) {
+      return data.value as Record<string, number>;
+    }
+    return {};
+  } catch (e) {
+    console.error("Exception fetching noblejas config:", e);
+    return {};
   }
 }

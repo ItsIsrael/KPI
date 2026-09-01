@@ -33,7 +33,6 @@ export function NoblejasUploader({ open, onOpenChange, goldMode = false }: Noble
 
   // Manual entry state
   const [manualCode, setManualCode] = useState("");
-  const [manualName, setManualName] = useState("");
   const [manualPalets, setManualPalets] = useState("");
   const [manualExtra, setManualExtra] = useState("");
 
@@ -155,13 +154,12 @@ export function NoblejasUploader({ open, onOpenChange, goldMode = false }: Noble
       {
         id: crypto.randomUUID(),
         codigo: finalCode,
-        nombre: manualName || "Ensalada Noblejas",
+        nombre: "Ensalada Noblejas",
         palets: parseInt(manualPalets || "0", 10),
         cajasExtra: parseInt(manualExtra || "0", 10),
       }
     ]);
     setManualCode("");
-    setManualName("");
     setManualPalets("");
     setManualExtra("");
   };
@@ -264,7 +262,7 @@ export function NoblejasUploader({ open, onOpenChange, goldMode = false }: Noble
           {/* Manual Entry Form */}
           <div className={cn("p-4 rounded-xl border", goldMode ? "bg-white/5 border-white/10" : "bg-gray-50 border-gray-200")}>
             <h3 className="font-bold mb-4">Ingreso Manual</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
               <div className="space-y-1 sm:col-span-1">
                 <Label>Cód. 10E</Label>
                 <div className={cn(
@@ -278,17 +276,9 @@ export function NoblejasUploader({ open, onOpenChange, goldMode = false }: Noble
                     onChange={e => setManualCode(e.target.value)} 
                     placeholder="123"
                     className="w-full h-full bg-transparent text-sm font-medium outline-none"
+                    onKeyDown={e => { if (e.key === 'Enter') handleAddManual(); }}
                   />
                 </div>
-              </div>
-              <div className="space-y-1 sm:col-span-2">
-                <Label>Nombre</Label>
-                <Input 
-                  value={manualName} 
-                  onChange={e => setManualName(e.target.value)} 
-                  placeholder="Ej. César"
-                  className={goldMode ? "bg-black/50 border-white/20 text-white" : "bg-white"}
-                />
               </div>
               <div className="space-y-1 sm:col-span-1">
                 <Label>Palets</Label>
@@ -298,6 +288,7 @@ export function NoblejasUploader({ open, onOpenChange, goldMode = false }: Noble
                   onChange={e => setManualPalets(e.target.value)} 
                   placeholder="0"
                   className={goldMode ? "bg-black/50 border-white/20 text-white" : "bg-white"}
+                  onKeyDown={e => { if (e.key === 'Enter') handleAddManual(); }}
                 />
               </div>
               <div className="space-y-1 sm:col-span-1">
@@ -313,6 +304,7 @@ export function NoblejasUploader({ open, onOpenChange, goldMode = false }: Noble
                       "min-w-[60px]",
                       goldMode ? "bg-black/50 border-white/20 text-white" : "bg-white"
                     )}
+                    onKeyDown={e => { if (e.key === 'Enter') handleAddManual(); }}
                   />
                   <Button 
                     type="button" 
@@ -415,7 +407,10 @@ export function NoblejasUploader({ open, onOpenChange, goldMode = false }: Noble
 
           {/* Saved Config Section */}
           <div className="pt-6">
-            <h3 className="font-bold border-b pb-2 mb-4">Configuraciones Guardadas en Base de Datos Local</h3>
+            <h3 className="font-bold border-b pb-2 mb-4 flex items-center gap-2">
+              Configuraciones Guardadas
+              <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", goldMode ? "bg-amber-500/20 text-amber-400" : "bg-emerald-100 text-emerald-700")}>🔄 Sincronizado entre PCs</span>
+            </h3>
             {Object.keys(noblejasConfig).length === 0 ? (
               <p className="text-sm opacity-60 italic text-center py-4">No hay cajas configuradas actualmente.</p>
             ) : (
