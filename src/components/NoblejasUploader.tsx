@@ -409,27 +409,35 @@ export function NoblejasUploader({ open, onOpenChange, goldMode = false }: Noble
               <p className="text-sm opacity-60 italic text-center py-4">No hay cajas configuradas actualmente.</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {Object.entries(noblejasConfig).map(([codigo, cajas]) => (
-                  <div key={codigo} className={cn(
-                    "p-3 rounded-xl border flex items-center justify-between",
-                    goldMode ? "bg-white/5 border-white/10" : "bg-white border-gray-200"
-                  )}>
-                    <div>
-                      <p className="font-bold text-sm">{codigo}</p>
-                      <p className={cn("text-xs", goldMode ? "text-emerald-400" : "text-emerald-600 font-semibold")}>
-                        {cajas} cajas
-                      </p>
+                {Object.entries(noblejasConfig).map(([codigo, cajas]) => {
+                  const bpp = findBppForCode(codigo, "");
+                  const pallets = Math.floor(cajas / bpp);
+                  const pico = cajas % bpp;
+                  return (
+                    <div key={codigo} className={cn(
+                      "p-3 rounded-xl border flex items-center justify-between",
+                      goldMode ? "bg-white/5 border-white/10" : "bg-white border-gray-200"
+                    )}>
+                      <div>
+                        <p className="font-bold text-sm">{codigo}</p>
+                        <p className={cn("text-xs", goldMode ? "text-emerald-400" : "text-emerald-600 font-semibold")}>
+                          {cajas} cajas
+                        </p>
+                        <p className={cn("text-[10px] mt-0.5", goldMode ? "text-white/30" : "text-slate-400")}>
+                          {pallets}p × {bpp} + {pico}c
+                        </p>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => removeNoblejasConfig(codigo)}
+                        className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 h-8 w-8"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
                     </div>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => removeNoblejasConfig(codigo)}
-                      className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 h-8 w-8"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

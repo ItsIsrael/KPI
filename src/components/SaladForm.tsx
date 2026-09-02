@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useProductionStore } from "@/store/production-store";
+import { Tag } from "lucide-react";
 import type { Format, Salad } from "@/types/types";
 import { DEFAULT_BOX_TYPES, generateId } from "@/types/types";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ interface FormatDraft {
   lote: string;
   cambioLote: boolean;
   note: string;
+  codigo10e: string;
 }
 
 function createEmptyFormat(): FormatDraft {
@@ -37,6 +39,7 @@ function createEmptyFormat(): FormatDraft {
     lote: "",
     cambioLote: false,
     note: "",
+    codigo10e: "",
   };
 }
 
@@ -49,7 +52,7 @@ function calcNoblejasCajas(pallets: string, cajas: string, boxesPerPallet: strin
 }
 
 export function SaladForm({ editingSalad, formMode = "standard", currentSaladInfo, onClose }: SaladFormProps) {
-  const { addSalad, updateSalad, goldMode } = useProductionStore();
+  const { addSalad, updateSalad, goldMode, noblejasConfig } = useProductionStore();
 
   const [name, setName] = useState(() => {
     if (formMode === "add-format" && currentSaladInfo) {
@@ -73,6 +76,7 @@ export function SaladForm({ editingSalad, formMode = "standard", currentSaladInf
           lote: f.lote ?? "",
           cambioLote: f.cambioLote ?? false,
           note: f.note ?? "",
+          codigo10e: f.codigo10e ?? "",
         };
       });
     }
@@ -160,6 +164,28 @@ export function SaladForm({ editingSalad, formMode = "standard", currentSaladInf
           if (boxType) {
             updated.boxesPerPallet = String(boxType.defaultBoxesPerPallet);
           }
+          // Re-calcular noblejas si hay código 10E y cambió el boxesPerPallet
+          if (updated.codigo10e) {
+            const clean = updated.codigo10e.replace(/\D/g, '');
+            const full10E = clean ? `10E${clean}` : '';
+            const nobConfig = full10E ? noblejasConfig[full10E] ?? noblejasConfig[full10E.toUpperCase()] : undefined;
+            if (nobConfig !== undefined && nobConfig > 0) {
+              const newBpp = parseInt(updated.boxesPerPallet, 10) || 1;
+              updated.nobjelasPallets = String(Math.floor(nobConfig / newBpp));
+              updated.nobjelasCajas = String(nobConfig % newBpp);
+            }
+          }
+        }
+        // Auto-detectar noblejas cuando se cambia el código 10E
+        if (field === "codigo10e" && typeof value === "string") {
+          const clean = value.replace(/\D/g, '');
+          const full10E = clean ? `10E${clean}` : '';
+          const nobConfig = full10E ? noblejasConfig[full10E] ?? noblejasConfig[full10E.toUpperCase()] : undefined;
+          if (nobConfig !== undefined && nobConfig > 0) {
+            const bpp = parseInt(updated.boxesPerPallet, 10) || 1;
+            updated.nobjelasPallets = String(Math.floor(nobConfig / bpp));
+            updated.nobjelasCajas = String(nobConfig % bpp);
+          }
         }
         return updated;
       })
@@ -197,6 +223,10 @@ export function SaladForm({ editingSalad, formMode = "standard", currentSaladInf
         newErrors.push(`Formato ${i + 1}: ha seleccionado cambio de lote pero no ha introducido el código`);
       }
 
+      // Construir codigo10e limpio
+      const cleanCode = f.codigo10e.replace(/\D/g, '');
+      const finalCodigo10e = cleanCode ? `10E${cleanCode}` : undefined;
+
       parsedFormats.push({
         id: f.id,
         boxType: f.boxType,
@@ -206,6 +236,7 @@ export function SaladForm({ editingSalad, formMode = "standard", currentSaladInf
         lote: f.cambioLote ? f.lote.trim() : undefined,
         cambioLote: f.cambioLote,
         note: f.note.trim() || undefined,
+        codigo10e: finalCodigo10e,
       });
     }
 
@@ -345,6 +376,7 @@ export function SaladForm({ editingSalad, formMode = "standard", currentSaladInf
                   </span>
                   {!isExpanded && (
                     <span className={cn("text-xs font-medium", goldMode ? "text-white/60" : "text-slate-600")}>
+                      {format.codigo10e && <span className="text-purple-500 font-bold mr-1">10E{format.codigo10e}</span>}
                       • {format.boxType} • {format.quantity || "0"} cajas
                       {nobTotal > 0 && ` (Nob: ${nobTotal}c)`}
                     </span>
@@ -390,6 +422,61 @@ export function SaladForm({ editingSalad, formMode = "standard", currentSaladInf
 
               {isExpanded && (
                 <>
+                  {/* Código 10E */}
+                  <div className="space-y-1.5">
+                    <label className={cn("text-xs font-semibold flex items-center gap-1.5", goldMode ? "text-white/60" : "text-slate-600")}>
+                      <Tag className="w-3 h-3" />
+                      Código 10E
+                      <span className={cn("text-[9px] font-normal", goldMode ? "text-white/30" : "text-slate-400")}>(opcional)</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className={cn(
+                        "flex items-center flex-1 h-12 px-3 rounded-xl border overflow-hidden transition-colors focus-within:ring-1",
+                        goldMode
+                          ? "bg-white/5 border-white/10 focus-within:ring-emerald-500/50"
+                          : "bg-white border-slate-300 focus-within:ring-emerald-600/30 focus-within:border-emerald-600"
+                      )}>
+                        <span className={cn("text-sm font-bold opacity-40 mr-1.5 select-none", goldMode ? "text-white" : "text-slate-500")}>10E</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={format.codigo10e}
+                          onChange={(e) => updateFormat(index, "codigo10e", e.target.value.replace(/\D/g, ''))}
+                          onKeyDown={handleKeyDown}
+                          placeholder="228"
+                          className={cn(
+                            "w-full h-full bg-transparent text-base font-bold outline-none",
+                            goldMode ? "text-white placeholder:text-white/20" : "text-slate-900 placeholder:text-slate-400"
+                          )}
+                          id={`codigo10e-input-${index}`}
+                        />
+                      </div>
+                      {(() => {
+                        const clean = format.codigo10e.replace(/\D/g, '');
+                        if (!clean) return null;
+                        const full10E = `10E${clean}`;
+                        const nobConfig = noblejasConfig[full10E] ?? noblejasConfig[full10E.toUpperCase()];
+                        const bpp = parseInt(format.boxesPerPallet, 10) || 1;
+                        if (nobConfig !== undefined && nobConfig > 0) {
+                          return (
+                            <div className="flex items-center shrink-0">
+                              <span className="text-[10px] font-bold px-2 py-1.5 rounded-lg bg-purple-500/10 text-purple-500 border border-purple-500/20 whitespace-nowrap">
+                                💜 {nobConfig}c ({Math.floor(nobConfig / bpp)}p + {nobConfig % bpp}c)
+                              </span>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="flex items-center shrink-0">
+                            <span className={cn("text-[10px] font-bold px-2 py-1.5 rounded-lg whitespace-nowrap", goldMode ? "bg-white/5 text-white/30 border border-white/10" : "bg-slate-100 text-slate-400 border border-slate-200")}>
+                              🏷️ {full10E}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
                   {/* Tipo de caja */}
                   <div className="space-y-1.5">
                     <label className={cn("text-xs font-semibold", goldMode ? "text-white/60" : "text-slate-600")}>Tipo de caja</label>
