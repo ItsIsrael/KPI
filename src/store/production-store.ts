@@ -538,12 +538,18 @@ export const useProductionStore = create<ProductionState>()(
         const newLineStorage = { ...state.lineStorage };
         const linesToSync: string[] = [];
 
+        // 1. Actualizar lineStorage de todas las líneas
         for (const [lineCode, lineData] of Object.entries(newLineStorage)) {
           let lineUpdated = false;
           const newQueue = lineData.queue.map(item => {
-            if (item.codigo10e && configs[item.codigo10e] !== undefined) {
-              lineUpdated = true;
-              return { ...item, noblejas: configs[item.codigo10e] };
+            const code = item.codigo10e?.toUpperCase();
+            if (code) {
+              // Buscar match case-insensitive en las configs
+              const configKey = Object.keys(configs).find(k => k.toUpperCase() === code);
+              if (configKey !== undefined) {
+                lineUpdated = true;
+                return { ...item, noblejas: configs[configKey] };
+              }
             }
             return item;
           });
@@ -554,9 +560,36 @@ export const useProductionStore = create<ProductionState>()(
           }
         }
 
+        // 2. Actualizar también la queue top-level (estado activo visible) directamente
+        let updatedTopLevelQueue = state.queue;
+        let topLevelUpdated = false;
+        if (state.activeLineCode && state.activeLineCode !== "ALL" && state.queue.length > 0) {
+          updatedTopLevelQueue = state.queue.map(item => {
+            const code = item.codigo10e?.toUpperCase();
+            if (code) {
+              const configKey = Object.keys(configs).find(k => k.toUpperCase() === code);
+              if (configKey !== undefined) {
+                topLevelUpdated = true;
+                return { ...item, noblejas: configs[configKey] };
+              }
+            }
+            return item;
+          });
+
+          // Asegurar que lineStorage también refleje los cambios de la línea activa
+          if (topLevelUpdated && !linesToSync.includes(state.activeLineCode)) {
+            const activeLineData = newLineStorage[state.activeLineCode];
+            if (activeLineData) {
+              newLineStorage[state.activeLineCode] = { ...activeLineData, queue: updatedTopLevelQueue };
+            }
+            linesToSync.push(state.activeLineCode);
+          }
+        }
+
         set({
           noblejasConfig: newNoblejasConfig,
           lineStorage: newLineStorage,
+          ...(topLevelUpdated ? { queue: updatedTopLevelQueue } : {}),
         });
 
         // Sincronizar noblejasConfig con Supabase para que todos los PCs lo vean
@@ -568,19 +601,13 @@ export const useProductionStore = create<ProductionState>()(
           const lines = await getProductionLines();
           for (const code of linesToSync) {
             const dbLine = lines.find(l => l.code === code);
-            if (dbLine) {
-              await syncQueueItems(dbLine.id, newLineStorage[code].queue);
+            const queueToSync = code === state.activeLineCode && topLevelUpdated
+              ? updatedTopLevelQueue
+              : newLineStorage[code]?.queue;
+            if (dbLine && queueToSync) {
+              await syncQueueItems(dbLine.id, queueToSync);
             }
           }
-        }
-
-        // Si hay una línea activa (no 'ALL'), actualizar también su queue y salads en el estado top-level
-        if (state.activeLineCode && state.activeLineCode !== "ALL" && linesToSync.includes(state.activeLineCode)) {
-           const activeStorage = newLineStorage[state.activeLineCode];
-           set({
-             queue: activeStorage.queue,
-             salads: activeStorage.salads
-           });
         }
       },
       removeNoblejasConfig: (codigo10e) => {

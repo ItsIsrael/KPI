@@ -143,11 +143,10 @@ export function NoblejasUploader({ open, onOpenChange, goldMode = false }: Noble
   };
 
   const handleAddManual = () => {
-    if (!manualCode) return;
+    const cleanCode = manualCode.replace(/\D/g, '');
+    if (!cleanCode) return;
     
-    // Extraer solo los números y asegurar que empieza por 10E
-    const cleanCode = manualCode.replace(/^10[eE]/i, '');
-    const finalCode = `10E${cleanCode}`.toUpperCase();
+    const finalCode = `10E${cleanCode}`;
 
     setEntries(prev => [
       ...prev,
@@ -264,21 +263,16 @@ export function NoblejasUploader({ open, onOpenChange, goldMode = false }: Noble
             <h3 className="font-bold mb-4">Ingreso Manual</h3>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
               <div className="space-y-1 sm:col-span-1">
-                <Label>Cód. 10E</Label>
-                <div className={cn(
-                  "flex items-center w-full h-10 px-3 rounded-md border overflow-hidden transition-colors focus-within:ring-1 focus-within:ring-emerald-500",
-                  goldMode ? "bg-black/50 border-white/20 text-white" : "bg-white border-slate-200"
-                )}>
-                  <span className={cn("text-sm font-bold opacity-50 mr-1", goldMode ? "text-white" : "text-slate-500")}>10E</span>
-                  <input 
-                    type="text" 
-                    value={manualCode} 
-                    onChange={e => setManualCode(e.target.value)} 
-                    placeholder="123"
-                    className="w-full h-full bg-transparent text-sm font-medium outline-none"
-                    onKeyDown={e => { if (e.key === 'Enter') handleAddManual(); }}
-                  />
-                </div>
+                <Label>Código</Label>
+                <Input 
+                  type="text" 
+                  inputMode="numeric"
+                  value={manualCode} 
+                  onChange={e => setManualCode(e.target.value.replace(/\D/g, ''))} 
+                  placeholder="943"
+                  className={goldMode ? "bg-black/50 border-white/20 text-white" : "bg-white"}
+                  onKeyDown={e => { if (e.key === 'Enter') handleAddManual(); }}
+                />
               </div>
               <div className="space-y-1 sm:col-span-1">
                 <Label>Palets</Label>
