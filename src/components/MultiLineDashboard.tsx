@@ -186,8 +186,8 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
   const [modalSaladName, setModalSaladName] = useState<string>("César");
   const [modalBoxType, setModalBoxType] = useState<string>("Cartón 4");
   const [modalBoxes, setModalBoxes] = useState<string>("");
-  const [modalNoblejas, setModalNoblejas] = useState<string>("0");
-  const [modalLote, setModalLote] = useState<string>("");
+  const [modalNoblejasPallets, setModalNoblejasPallets] = useState<string>("");
+  const [modalNoblejasBoxes, setModalNoblejasBoxes] = useState<string>("");
   const [isNoblejasConfigOpen, setIsNoblejasConfigOpen] = useState(false);
   const [newCode10e, setNewCode10e] = useState("");
   const [newBoxes10e, setNewBoxes10e] = useState("");
@@ -629,6 +629,13 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
     setActionLoadingId(null);
   };
 
+  const handleCloseQuickAddModal = () => {
+    setModalBoxes("");
+    setModalNoblejasPallets("");
+    setModalNoblejasBoxes("");
+    setQuickAddLineCode(null);
+  };
+
   // Quick Action: Cargar Ensalada Rápida desde Modal
   const handleQuickAddSubmit = async () => {
     if (!quickAddLineCode) return;
@@ -637,7 +644,9 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
 
     const boxConfig = DEFAULT_BOX_TYPES.find((b) => b.name === modalBoxType) || DEFAULT_BOX_TYPES[0];
     const totalQty = parseInt(modalBoxes, 10) || 0;
-    const nobQty = parseInt(modalNoblejas, 10) || 0;
+    const nobPallets = parseInt(modalNoblejasPallets, 10) || 0;
+    const nobBoxes = parseInt(modalNoblejasBoxes, 10) || 0;
+    const nobQty = (nobPallets * boxConfig.defaultBoxesPerPallet) + nobBoxes;
 
     const newFormat = {
       id: generateId(),
@@ -645,7 +654,6 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
       quantity: totalQty,
       noblejas: nobQty,
       boxesPerPallet: boxConfig.defaultBoxesPerPallet,
-      lote: modalLote || undefined,
       linea: quickAddLineCode,
     };
 
@@ -658,7 +666,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
     // Use the native store action to append to queue correctly without deleting everything else
     await useProductionStore.getState().addSalad(newSalad, quickAddLineCode);
 
-    setQuickAddLineCode(null);
+    handleCloseQuickAddModal();
     fetchOverview();
     
     notifySuccess("Ensalada añadida", `Añadida con éxito en línea ${quickAddLineCode}`);
@@ -1971,7 +1979,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
       {quickAddLineCode && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
-          onClick={() => setQuickAddLineCode(null)}
+          onClick={handleCloseQuickAddModal}
         >
           <div
             className={cn(
@@ -1987,7 +1995,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                 <span>⚡ Cargar Ensalada en {quickAddLineCode}</span>
               </h3>
               <button
-                onClick={() => setQuickAddLineCode(null)}
+                onClick={handleCloseQuickAddModal}
                 className="p-1 rounded-lg hover:bg-black/10 cursor-pointer"
                 type="button"
               >
@@ -2045,54 +2053,75 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
             </div>
 
             {/* Cantidad de Cajas */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold uppercase tracking-wider opacity-70">
-                  Cajas Totales:
-                </label>
-                <input
-                  type="number"
-                  value={modalBoxes}
-                  onChange={(e) => setModalBoxes(e.target.value)}
-                  className={cn(
-                    "w-full h-10 px-3 rounded-xl border text-sm font-bold",
-                    goldMode ? "bg-white/5 border-white/15 text-white" : "bg-slate-50 border-slate-300 text-black"
-                  )}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold uppercase tracking-wider opacity-70">
-                  Noblejas (cajas):
-                </label>
-                <input
-                  type="number"
-                  value={modalNoblejas}
-                  onChange={(e) => setModalNoblejas(e.target.value)}
-                  className={cn(
-                    "w-full h-10 px-3 rounded-xl border text-sm font-bold",
-                    goldMode ? "bg-white/5 border-white/15 text-white" : "bg-slate-50 border-slate-300 text-black"
-                  )}
-                  placeholder="0"
-                />
-              </div>
-            </div>
-
-            {/* Lote */}
             <div className="space-y-1">
               <label className="text-[11px] font-bold uppercase tracking-wider opacity-70">
-                Lote (Opcional):
+                Cajas Totales:
               </label>
               <input
-                type="text"
-                value={modalLote}
-                onChange={(e) => setModalLote(e.target.value)}
-                placeholder="Ej. L-2611A"
+                type="number"
+                min="0"
+                value={modalBoxes}
+                onChange={(e) => setModalBoxes(e.target.value)}
                 className={cn(
                   "w-full h-10 px-3 rounded-xl border text-sm font-bold",
                   goldMode ? "bg-white/5 border-white/15 text-white" : "bg-slate-50 border-slate-300 text-black"
                 )}
               />
+            </div>
+
+            {/* Noblejas: Palets y Cajas */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold uppercase tracking-wider opacity-70">
+                  Noblejas:
+                </label>
+                {(() => {
+                  const boxConfig = DEFAULT_BOX_TYPES.find((b) => b.name === modalBoxType) || DEFAULT_BOX_TYPES[0];
+                  const p = parseInt(modalNoblejasPallets, 10) || 0;
+                  const c = parseInt(modalNoblejasBoxes, 10) || 0;
+                  const total = (p * boxConfig.defaultBoxesPerPallet) + c;
+                  if (total > 0) {
+                    return (
+                      <span className={cn("text-xs font-bold font-mono", goldMode ? "text-amber-400" : "text-emerald-600")}>
+                        Total: {total} cajas ({p > 0 ? `${p} pal${p > 1 ? "s" : ""}` : ""}{p > 0 && c > 0 ? " + " : ""}{c > 0 ? `${c} cj` : ""})
+                      </span>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider opacity-60">
+                    Palets:
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={modalNoblejasPallets}
+                    onChange={(e) => setModalNoblejasPallets(e.target.value)}
+                    className={cn(
+                      "w-full h-10 px-3 rounded-xl border text-sm font-bold",
+                      goldMode ? "bg-white/5 border-white/15 text-white" : "bg-slate-50 border-slate-300 text-black"
+                    )}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider opacity-60">
+                    Cajas:
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={modalNoblejasBoxes}
+                    onChange={(e) => setModalNoblejasBoxes(e.target.value)}
+                    className={cn(
+                      "w-full h-10 px-3 rounded-xl border text-sm font-bold",
+                      goldMode ? "bg-white/5 border-white/15 text-white" : "bg-slate-50 border-slate-300 text-black"
+                    )}
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Botón Iniciar */}
