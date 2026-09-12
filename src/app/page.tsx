@@ -18,7 +18,7 @@ import { ProductionQueue } from "@/components/ProductionQueue";
 import { EditQueueItemDialog } from "@/components/EditQueueItemDialog";
 import { TransitionBanner } from "@/components/TransitionBanner";
 import { cn } from "@/lib/utils";
-import { Calculator as CalcIcon, Maximize, Minimize, Trash2, Play, History, LogOut, LayoutDashboard, Layers, Plus } from "lucide-react";
+import { Calculator as CalcIcon, Maximize, Minimize, Trash2, Play, History, LogOut, LayoutDashboard, Layers, Plus, Pause, ChevronDown, ChevronUp } from "lucide-react";
 import { LoginScreen } from "@/components/LoginScreen";
 import { ScreenLockOverlay } from "@/components/ScreenLockOverlay";
 import { MultiLineDashboard } from "@/components/MultiLineDashboard";
@@ -86,6 +86,11 @@ export default function Home() {
   const [showLabelsModal, setShowLabelsModal] = useState(false);
   const [showPrepLineModal, setShowPrepLineModal] = useState(true);
   
+  // Acciones secundarias en vista de producción
+  const [showAddQueueMenu, setShowAddQueueMenu] = useState(false);
+  const [showMoreProdActions, setShowMoreProdActions] = useState(false);
+  const [showClearLineModal, setShowClearLineModal] = useState(false);
+
   // Filtro de historial
   const [historyFilter, setHistoryFilter] = useState("");
 
@@ -346,41 +351,123 @@ export default function Home() {
         <ProductionCard />
         <ProductionControls />
         
-        {/* Acciones rápidas para la cola activa */}
-        <div className="grid grid-cols-2 gap-2 pb-1 pt-0.5">
-          <Button
-            onClick={() => {
-              setFormMode("add-format");
-              setShowForm(true);
-            }}
-            className={cn("h-11 text-xs font-black border rounded-xl transition-all active:scale-[0.98] cursor-pointer", goldMode ? "bg-purple-500/10 border-purple-500/25 hover:bg-purple-500/20 text-purple-300" : "bg-purple-50 border-purple-200 hover:bg-purple-100 text-purple-700")}
-          >
-            ➕ Añadir Formato
-          </Button>
-          <Button
-            onClick={() => {
-              setFormMode("add-salad");
-              setShowForm(true);
-            }}
-            className={cn("h-11 text-xs font-black border rounded-xl transition-all active:scale-[0.98] cursor-pointer", goldMode ? "bg-emerald-500/10 border-emerald-500/25 hover:bg-emerald-500/20 text-emerald-300" : "bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-700")}
-          >
-            🥗 Nueva Ensalada
-          </Button>
+        {/* Acciones secundarias y gestión de cola */}
+        <div className="space-y-2 pt-1 pb-1">
+          <div className="flex items-center gap-2">
+            {/* 1. Agrupar 'Añadir formato' y 'Nueva ensalada' bajo 'Añadir a cola' */}
+            <div className="relative flex-1">
+              <button
+                type="button"
+                onClick={() => setShowAddQueueMenu(!showAddQueueMenu)}
+                className={cn(
+                  "w-full min-h-[44px] px-3.5 py-2 rounded-xl border font-bold text-xs flex items-center justify-between transition-all cursor-pointer shadow-sm active:scale-[0.98]",
+                  goldMode
+                    ? "bg-white/5 border-white/15 text-white hover:bg-white/10"
+                    : "bg-white border-slate-300 text-slate-800 hover:bg-slate-50"
+                )}
+              >
+                <span className="flex items-center gap-2 font-black">
+                  <Plus className="w-4 h-4 text-emerald-500" />
+                  <span>Añadir a cola</span>
+                </span>
+                <ChevronDown className={cn("w-4 h-4 opacity-60 transition-transform duration-200", showAddQueueMenu && "rotate-180")} />
+              </button>
+
+              {showAddQueueMenu && (
+                <>
+                  <div className="fixed inset-0 z-20" onClick={() => setShowAddQueueMenu(false)} />
+                  <div className="absolute top-full left-0 right-0 mt-1 z-30 p-1.5 rounded-2xl border bg-white dark:bg-slate-900 border-slate-200 dark:border-white/10 shadow-xl space-y-1 animate-in fade-in zoom-in-95 duration-150">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddQueueMenu(false);
+                        setFormMode("add-format");
+                        setShowForm(true);
+                      }}
+                      className="w-full min-h-[44px] px-3 py-2 rounded-xl text-left text-xs font-bold hover:bg-emerald-50 dark:hover:bg-white/5 flex items-center gap-2 text-slate-800 dark:text-white cursor-pointer"
+                    >
+                      <span className="text-sm">➕</span>
+                      <span>Añadir formato (a ensalada actual)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddQueueMenu(false);
+                        setFormMode("add-salad");
+                        setShowForm(true);
+                      }}
+                      className="w-full min-h-[44px] px-3 py-2 rounded-xl text-left text-xs font-bold hover:bg-emerald-50 dark:hover:bg-white/5 flex items-center gap-2 text-slate-800 dark:text-white cursor-pointer"
+                    >
+                      <span className="text-sm">🥗</span>
+                      <span>Nueva ensalada completa</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* 2. Pausar producción (separado de vaciar) */}
+            <button
+              type="button"
+              onClick={() => {
+                useProductionStore.getState().resetProduction();
+                notifySuccess("Producción pausada", "La línea se ha pausado. Las órdenes siguen en cola.");
+              }}
+              className={cn(
+                "min-h-[44px] px-4 py-2 rounded-xl border font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-[0.98] shrink-0",
+                goldMode
+                  ? "bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20"
+                  : "bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100"
+              )}
+              title="Pausar producción y volver a preparación sin borrar la cola"
+            >
+              <Pause className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <span>Pausar</span>
+            </button>
+
+            {/* 3. Menú Más acciones (incluye Vaciar Línea) */}
+            <button
+              type="button"
+              onClick={() => setShowMoreProdActions(!showMoreProdActions)}
+              className={cn(
+                "min-h-[44px] px-3 py-2 rounded-xl border font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-[0.98] shrink-0",
+                showMoreProdActions
+                  ? "bg-slate-200 dark:bg-white/20 border-slate-400"
+                  : "bg-white/5 border-white/10 text-white/70 hover:text-white"
+              )}
+              title="Más acciones operativas"
+            >
+              <span>•••</span>
+              <span className="hidden sm:inline text-[11px]">Más</span>
+            </button>
+          </div>
+
+          {/* Opciones dentro de Más Acciones */}
+          {showMoreProdActions && (
+            <div className="p-3 rounded-2xl border bg-red-500/[0.03] border-red-500/25 space-y-2 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black text-red-400 uppercase tracking-wider">Acciones de emergencia / Peligro</span>
+                <button
+                  type="button"
+                  onClick={() => setShowMoreProdActions(false)}
+                  className="text-xs text-white/40 hover:text-white cursor-pointer"
+                >
+                  Cerrar
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowClearLineModal(true)}
+                className="w-full min-h-[44px] px-4 py-2.5 rounded-xl font-bold text-xs border border-red-500/40 bg-red-500/10 hover:bg-red-500/20 text-red-500 dark:text-red-400 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-[0.98]"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Vaciar línea (Eliminar toda la cola)</span>
+              </button>
+            </div>
+          )}
         </div>
 
         <ProductionQueue editable />
-        {/* Botón de emergencia */}
-        <div className="pb-2">
-          <Button
-            onClick={() => {
-              clearQueueAndSalads();
-            }}
-            className="w-full h-12 text-sm font-bold bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-400 hover:to-red-500 text-white shadow-lg shadow-red-500/20 rounded-xl transition-all active:scale-[0.98]"
-            id="reset-production-btn"
-          >
-            🛑 Detener y Limpiar Línea
-          </Button>
-        </div>
       </div>
       <FinishFormatDialog />
     </div>
@@ -1049,6 +1136,58 @@ export default function Home() {
         onOpenChange={setShowPrepLineModal}
         goldMode={goldMode}
       />
+
+      {/* Modal de confirmación para Vaciar Línea */}
+      {showClearLineModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in"
+          onClick={() => setShowClearLineModal(false)}
+        >
+          <div
+            className={cn(
+              "w-full max-w-md rounded-3xl p-6 border shadow-2xl space-y-4 animate-in zoom-in-95",
+              goldMode
+                ? "bg-[#141006] border-red-500/40 text-white"
+                : "bg-white border-red-300 text-slate-900"
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-500 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black tracking-tight">¿Vaciar toda la línea {activeLineCode}?</h3>
+                <p className="text-xs text-slate-500 dark:text-white/60 mt-1 leading-relaxed">
+                  Esta acción detendrá la producción y eliminará todas las órdenes pendientes de la cola de la línea {activeLineCode}. No se puede deshacer.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowClearLineModal(false)}
+                className="min-h-[44px] px-4 rounded-xl border border-slate-300 dark:border-white/15 text-xs font-bold hover:bg-slate-100 dark:hover:bg-white/5 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  clearQueueAndSalads();
+                  setShowClearLineModal(false);
+                  setShowMoreProdActions(false);
+                  notifySuccess("Línea vaciada", `Se han eliminado todas las órdenes de ${activeLineCode}.`);
+                }}
+                className="min-h-[44px] px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black shadow-lg shadow-red-600/30 cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Sí, vaciar línea</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Calculadora */}
       <Calculator />
