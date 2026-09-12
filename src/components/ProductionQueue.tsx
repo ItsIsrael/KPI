@@ -7,6 +7,8 @@ import type { QueueItem } from "@/types/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ChevronUp, ChevronDown } from "lucide-react";
+import { notifyWithUndo } from "@/lib/notifications";
+import { syncQueueItems } from "@/lib/supabase-service";
 
 interface ProductionQueueProps {
   editable?: boolean;
@@ -26,6 +28,42 @@ export function ProductionQueue({ editable = false }: ProductionQueueProps) {
   } = useProductionStore();
 
   const totalQueueBoxes = queue.reduce((sum, item) => sum + item.quantity, 0);
+
+  const handleRemoveItem = async (index: number) => {
+    const itemToRemove = queue[index];
+    if (!itemToRemove) return;
+
+    await removeFromQueue(index);
+
+    notifyWithUndo(
+      "Formato eliminado",
+      `${itemToRemove.saladName} (${itemToRemove.boxType}) - ${itemToRemove.quantity} cajas`,
+      async () => {
+        const state = useProductionStore.getState();
+        const currentQueue = [...state.queue];
+        const targetIndex = Math.min(index, currentQueue.length);
+        currentQueue.splice(targetIndex, 0, itemToRemove);
+
+        const lineCode = state.activeLineCode;
+        useProductionStore.setState({
+          queue: currentQueue,
+          lineStorage: {
+            ...state.lineStorage,
+            ...(lineCode && lineCode !== "ALL" ? {
+              [lineCode]: {
+                ...(state.lineStorage[lineCode] || {}),
+                queue: currentQueue,
+              }
+            } : {})
+          }
+        });
+
+        if (state.activeLineId) {
+          await syncQueueItems(state.activeLineId, currentQueue);
+        }
+      }
+    );
+  };
 
   // Acordeón: colapsado por defecto durante producción, expandido en preparación
   const [isExpanded, setIsExpanded] = useState(!isProducing);
@@ -301,11 +339,7 @@ export function ProductionQueue({ editable = false }: ProductionQueueProps) {
                       {(!isProducing || isPending) && (
                         <button
                           type="button"
-                          onClick={() => {
-                            if (window.confirm("¿Seguro que deseas eliminar este formato de la cola?")) {
-                              removeFromQueue(index);
-                            }
-                          }}
+                          onClick={() => handleRemoveItem(index)}
                           className="h-8 w-8 flex items-center justify-center text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
                           id={`queue-remove-${index}`}
                           title="Eliminar"

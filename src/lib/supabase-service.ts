@@ -263,7 +263,7 @@ export async function syncLineState(
 }
 
 export async function syncQueueItems(lineId: string, queue: QueueItem[]) {
-  if (!isSupabaseConfigured || !supabase || lineId.startsWith("local-")) return;
+  if (!isSupabaseConfigured || !supabase || lineId.startsWith("local-")) return false;
 
   try {
     const queueIds = queue.map((q) => q.id);
@@ -290,6 +290,9 @@ export async function syncQueueItems(lineId: string, queue: QueueItem[]) {
       const { error } = await supabase.from("line_queue_items").upsert(rows, { onConflict: "id" });
       if (error) {
         console.error("Supabase upsert error in syncQueueItems:", error.message, error.details, error.hint);
+        // No continuar con la limpieza: si la inserción falló, podría borrar una
+        // cola válida y dejar los progresos sin su registro padre.
+        return false;
       }
     }
 
@@ -322,8 +325,10 @@ export async function syncQueueItems(lineId: string, queue: QueueItem[]) {
         if (err2) console.error("Error deleting line_queue_items (all):", err2);
       }
     }
+    return true;
   } catch (e) {
     console.error("Error en syncQueueItems:", e);
+    return false;
   }
 }
 
@@ -350,13 +355,16 @@ export async function hardResetLine(lineId: string) {
   }
 }
 
-export async function syncProgress(queueItemId: string, progress: FormatProgress) {
-  if (!isSupabaseConfigured || !supabase || queueItemId.startsWith("local-")) return;
+const progressSyncChains = new Map<string, Promise<boolean>>();
+const PROGRESS_SYNC_ATTEMPTS = 3;
 
-  try {
-    // Upsert directamente — si el FK falla, el catch lo gestiona silenciosamente.
-    // Eliminamos la consulta SELECT previa que añadía una ronda extra innecesaria.
-    const { error } = await supabase.from("queue_item_progress").upsert(
+function waitForRetry(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+async function persistProgress(queueItemId: string, progress: FormatProgress): Promise<boolean> {
+  for (let attempt = 1; attempt <= PROGRESS_SYNC_ATTEMPTS; attempt += 1) {
+    const { error } = await supabase!.from("queue_item_progress").upsert(
       {
         queue_item_id: queueItemId,
         completed_pallets: progress.completedPallets,
@@ -372,11 +380,47 @@ export async function syncProgress(queueItemId: string, progress: FormatProgress
       },
       { onConflict: "queue_item_id" }
     );
-    if (error) {
-      // FK violation o item no existe → ignorar silenciosamente
+    if (!error) return true;
+
+    // 23503 significa que el item padre todavía no está disponible. Puede
+    // ocurrir justo después de crear una cola; reintentamos de forma acotada.
+    const isForeignKeyError = error.code === "23503";
+    if (!isForeignKeyError || attempt === PROGRESS_SYNC_ATTEMPTS) {
+      console.error("No se pudo sincronizar el progreso de producción:", {
+        queueItemId,
+        code: error.code,
+        message: error.message,
+        details: error.details,
+      });
+      return false;
     }
-  } catch (e) {
-    // Silenciar errores no críticos (ej: item eliminado entre medias)
+
+    await waitForRetry(200 * attempt);
+  }
+  return false;
+}
+
+export async function syncProgress(queueItemId: string, progress: FormatProgress): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase || queueItemId.startsWith("local-")) return false;
+
+  // Serializar los cambios por item impide que dos pulsaciones rápidas terminen
+  // en orden inverso y que el servidor guarde un contador antiguo.
+  const previous = progressSyncChains.get(queueItemId) || Promise.resolve(true);
+  const current = previous
+    .catch(() => false)
+    .then(() => persistProgress(queueItemId, progress))
+    .catch((error) => {
+      console.error("Error inesperado sincronizando progreso:", error);
+      return false;
+    });
+
+  progressSyncChains.set(queueItemId, current);
+  try {
+    return await current;
+  } finally {
+    if (progressSyncChains.get(queueItemId) === current) {
+      progressSyncChains.delete(queueItemId);
+    }
   }
 }
 

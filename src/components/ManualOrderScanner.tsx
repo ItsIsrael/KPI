@@ -8,6 +8,7 @@ import { useProductionStore } from "@/store/production-store";
 import { cn } from "@/lib/utils";
 import { DEFAULT_BOX_TYPES, DEFAULT_SALADS } from "@/types/types";
 import type { Salad, OrderRow } from "@/types/types";
+import { notifySuccess, notifyWarning } from "@/lib/notifications";
 
 interface ManualOrderScannerProps {
   onClose: () => void;
@@ -59,7 +60,7 @@ export function ManualOrderScanner({ onClose, targetLineCode }: ManualOrderScann
     const validRows = rows.filter(r => r.name.trim() !== "" && parseInt(r.quantity, 10) > 0);
     
     if (validRows.length === 0) {
-      alert("No hay ensaladas válidas para añadir. Asegúrate de rellenar Nombre y Cajas.");
+      notifyWarning("Formulario incompleto", "No hay ensaladas válidas para añadir. Asegúrate de rellenar Nombre y Cajas.");
       return;
     }
 
@@ -118,7 +119,7 @@ export function ManualOrderScanner({ onClose, targetLineCode }: ManualOrderScann
       addSalad(salad, targetLineCode);
     });
     
-    alert("¡Ensaladas añadidas a la cola correctamente!");
+    notifySuccess("¡Órdenes añadidas!", "Ensaladas añadidas a la cola correctamente.");
   };
 
   return (

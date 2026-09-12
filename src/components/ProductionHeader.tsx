@@ -7,6 +7,7 @@ import { Clock } from "./Clock";
 import { Calculator, Sun, Moon, Maximize, Minimize, Globe, Tv, LogOut, Lock, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
+import { LineSelectorModal } from "./LineSelectorModal";
 
 interface ProductionHeaderProps {
   onOpenLabelsModal: () => void;
@@ -40,6 +41,7 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
   const todayLabel = getTodayLabelColor(customDayLabelIndex);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showLineModal, setShowLineModal] = useState(false);
 
   useEffect(() => {
     const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -165,16 +167,35 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
           {/* Fila Inferior (Mobile) / Fila Derecha (Desktop): Botones de control y Navegación */}
           <div className="flex items-center justify-between lg:justify-end gap-2.5 w-full lg:w-auto border-t border-black/5 dark:border-white/5 pt-1.5 lg:border-t-0 lg:pt-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              {/* Navegación limpia y espaciosa */}
-              {activeLineCode !== "ALL" && (
+              {/* Navegación limpia y contextual */}
+              {activeLineCode !== "ALL" ? (
+                <div className="flex items-center gap-1.5">
+                  <div className={cn(
+                    "px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black border-2 shadow-md flex items-center gap-1.5 uppercase tracking-widest",
+                    goldMode
+                      ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
+                      : "bg-emerald-600 text-white border-emerald-400"
+                  )}>
+                    <span className="text-sm">📍</span>
+                    <span>Línea {activeLineCode}</span>
+                  </div>
+                  <button
+                    onClick={() => setShowLineModal(true)}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-bold border border-white/15 bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer shadow-sm active:scale-95"
+                    title="Cambiar de línea de trabajo"
+                    type="button"
+                  >
+                    Cambiar
+                  </button>
+                </div>
+              ) : (
                 <div className={cn(
                   "px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black border-2 shadow-md flex items-center gap-1.5 uppercase tracking-widest",
                   goldMode
                     ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
                     : "bg-emerald-600 text-white border-emerald-400"
                 )}>
-                  <span className="text-sm">📍</span>
-                  <span>Línea {activeLineCode}</span>
+                  <span>🌐 Dashboard</span>
                 </div>
               )}
 
@@ -190,7 +211,7 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
                     ? "bg-white/5 border-white/10 text-white/70 hover:text-white hover:bg-white/10 hover:scale-105 active:scale-95"
                     : "bg-white border-slate-300 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 hover:scale-105 active:scale-95"
                 )}
-                title="Ver Monitor Multilínea (Dashboard)"
+                title="Ver Monitor Multilínea (Dashboard de Planta)"
                 type="button"
               >
                 <LayoutDashboard className="w-4 h-4" />
@@ -362,6 +383,12 @@ export function ProductionHeader({ onOpenLabelsModal }: ProductionHeaderProps) {
           );
         })()}
       </div>
+
+      <LineSelectorModal
+        open={showLineModal}
+        onOpenChange={setShowLineModal}
+        goldMode={goldMode}
+      />
     </div>
   );
 }

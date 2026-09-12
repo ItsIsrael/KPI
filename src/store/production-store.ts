@@ -39,7 +39,13 @@ if (localSyncChannel) {
     if (event.data?.type === "LINE_DATA_UPDATED") {
       const state = useProductionStore.getState();
       if (state.activeLineCode === event.data.lineCode || state.activeLineCode === "ALL") {
-        state.loadActiveLineData();
+        // loadActiveLineData no carga nada en ALL; el dashboard necesita
+        // reconstruir el almacenamiento de las cuatro líneas.
+        if (state.activeLineCode === "ALL") {
+          void state.loadAllLinesData();
+        } else {
+          void state.loadActiveLineData();
+        }
       }
     }
   };
@@ -261,6 +267,14 @@ function formatDuration(ms: number): string {
   return `${secs}s`;
 }
 
+// No fiarse de activeLineId durante un cambio de pantalla: hasta que la nueva
+// línea termina de cargar puede ser null (o, peor, pertenecer a la anterior).
+async function resolveLineIdForCode(lineCode: string): Promise<string | null> {
+  if (!lineCode || lineCode === "ALL") return null;
+  const lines = await getProductionLines();
+  return lines.find((line) => line.code === lineCode)?.id ?? null;
+}
+
 let currentLoadRequestId = 0;
 
 // Timestamp de la última escritura local por línea para proteger contra race conditions
@@ -294,7 +308,9 @@ export const useProductionStore = create<ProductionState>()(
           }));
         }
 
-        set({ activeLineCode: code });
+        // Nunca conservar el id de la línea anterior durante una transición:
+        // una mutación rápida no debe escribirse accidentalmente en esa línea.
+        set({ activeLineCode: code, activeLineId: null });
         if (code === "ALL") {
           // Cargar datos de todas las líneas desde Supabase al entrar al Dashboard
           await get().loadAllLinesData();
@@ -667,13 +683,9 @@ export const useProductionStore = create<ProductionState>()(
         const state = get();
         const lineCodeToUse = targetLineCode || state.activeLineCode;
 
-        // Obtener ID de la línea si no está cargado
-        let lineIdToUse = state.activeLineId;
-        if (targetLineCode && targetLineCode !== state.activeLineCode) {
-          const lines = await getProductionLines();
-          const targetLine = lines.find((l) => l.code === targetLineCode);
-          if (targetLine) lineIdToUse = targetLine.id;
-        }
+        // Resolver por código, no reutilizar activeLineId: puede estar en plena
+        // transición al cambiar de línea.
+        const lineIdToUse = await resolveLineIdForCode(lineCodeToUse);
 
         const newQueueItems: QueueItem[] = salad.formats.map((format) => ({
           id: generateId(),
@@ -1206,7 +1218,7 @@ export const useProductionStore = create<ProductionState>()(
       // ===== PRODUCCIÓN =====
 
       startProduction: () => {
-        const { queue, activeLineId } = get();
+        const { queue, activeLineCode } = get();
         if (queue.length === 0) return;
 
         const progressMap: Record<string, FormatProgress> = {};
@@ -1214,9 +1226,9 @@ export const useProductionStore = create<ProductionState>()(
           progressMap[item.id] = createInitialProgress(item.id);
         });
 
-        if (activeLineId) {
-          syncLineState(activeLineId, true, 0);
-        }
+        void resolveLineIdForCode(activeLineCode).then((lineId) => {
+          if (lineId) void syncLineState(lineId, true, 0);
+        });
 
         set({
           isProducing: true,
@@ -1657,10 +1669,10 @@ export const useProductionStore = create<ProductionState>()(
       },
 
       resetProduction: () => {
-        const { activeLineId, activeLineCode } = get();
-        if (activeLineId) {
-          syncLineState(activeLineId, false, 0);
-        }
+        const { activeLineCode } = get();
+        void resolveLineIdForCode(activeLineCode).then((lineId) => {
+          if (lineId) void syncLineState(lineId, false, 0);
+        });
         set((state) => ({
           isProducing: false,
           currentQueueIndex: 0,
@@ -1680,11 +1692,12 @@ export const useProductionStore = create<ProductionState>()(
       },
 
       clearQueueAndSalads: () => {
-        const { activeLineId, activeLineCode } = get();
-        if (activeLineId) {
-          syncLineState(activeLineId, false, 0);
-          syncQueueItems(activeLineId, []);
-        }
+        const { activeLineCode } = get();
+        void resolveLineIdForCode(activeLineCode).then((lineId) => {
+          if (!lineId) return;
+          void syncLineState(lineId, false, 0);
+          void syncQueueItems(lineId, []);
+        });
         const emptyState = {
           salads: [],
           queue: [],
@@ -1748,7 +1761,8 @@ export const useProductionStore = create<ProductionState>()(
       },
 
       hardResetDatabase: async () => {
-        const { activeLineId, activeLineCode } = get();
+        const { activeLineCode } = get();
+        const activeLineId = await resolveLineIdForCode(activeLineCode);
         if (activeLineId) {
           await hardResetLine(activeLineId);
         }

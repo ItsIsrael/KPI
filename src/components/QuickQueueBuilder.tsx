@@ -6,19 +6,21 @@ import { DEFAULT_BOX_TYPES, DEFAULT_PRODUCTION_LINES, generateId, calculateForma
 import type { Salad } from "@/types/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Plus, Package, Check, AlertCircle, Sparkles, Layers } from "lucide-react";
-
-
+import { Plus, Package, Check, AlertCircle, Sparkles, Layers, ChevronDown, ChevronUp, Tag, Calendar, FileText, RefreshCw } from "lucide-react";
+import { notifySuccess, notifyError } from "@/lib/notifications";
+import { LineSelectorModal } from "@/components/LineSelectorModal";
 
 interface QuickQueueBuilderProps {
   goldMode?: boolean;
+  onCancel?: () => void;
 }
 
-export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) {
-  const { addSalad, activeLineCode, setActiveLineCode } = useProductionStore();
+export function QuickQueueBuilder({ goldMode = false, onCancel }: QuickQueueBuilderProps) {
+  const { addSalad, activeLineCode, setActiveLineCode, salads } = useProductionStore();
 
   // Línea seleccionada en el formulario (por defecto la activa)
   const [selectedLine, setSelectedLine] = useState<string>(activeLineCode === "ALL" ? "K00" : activeLineCode);
+  const [showLineModal, setShowLineModal] = useState(false);
 
   useEffect(() => {
     if (activeLineCode !== "ALL") {
@@ -29,24 +31,27 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
   const [saladName, setSaladName] = useState<string>("");
   const [selectedBoxType, setSelectedBoxType] = useState<string>("Cartón 6");
   const [quantity, setQuantity] = useState<string>("");
+  
+  // Toggle para Noblejas (Oculto por defecto)
+  const [showNoblejasToggle, setShowNoblejasToggle] = useState<boolean>(false);
   const [noblejasPallets, setNoblejasPallets] = useState<string>("");
   const [noblejasCajas, setNoblejasCajas] = useState<string>("");
-  const [boxesPerPallet, setBoxesPerPallet] = useState<number>(DEFAULT_BOX_TYPES[0].defaultBoxesPerPallet);
+
+  // Toggle para Detalles Opcionales (Lote, Caducidad, Nota)
+  const [showOptionalDetails, setShowOptionalDetails] = useState<boolean>(false);
   const [lote, setLote] = useState<string>("");
   const [fechaCaducidad, setFechaCaducidad] = useState<string>("");
   const [note, setNote] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
 
-  // Cálculos en vivo y límites de Noblejas
+  const [boxesPerPallet, setBoxesPerPallet] = useState<number>(DEFAULT_BOX_TYPES[0].defaultBoxesPerPallet);
+
+  // Cálculos en vivo
   const numQuantity = Math.max(0, parseInt(quantity, 10) || 0);
-  const numNobPallets = Math.max(0, parseInt(noblejasPallets, 10) || 0);
-  const numNobCajas = Math.max(0, parseInt(noblejasCajas, 10) || 0);
+  const numNobPallets = showNoblejasToggle ? Math.max(0, parseInt(noblejasPallets, 10) || 0) : 0;
+  const numNobCajas = showNoblejasToggle ? Math.max(0, parseInt(noblejasCajas, 10) || 0) : 0;
   const totalNoblejasBoxes = numNobPallets * boxesPerPallet + numNobCajas;
 
-  // Límites estrictos basados en la cantidad total de la orden
   const maxNoblejasPallets = Math.max(0, Math.floor(numQuantity / boxesPerPallet));
-  const remainingMilagroBoxes = Math.max(0, numQuantity - totalNoblejasBoxes);
-  const canAddNobPallet = (numNobPallets + 1) * boxesPerPallet <= numQuantity;
 
   const calc = calculateFormat({
     id: "preview",
@@ -56,14 +61,11 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
     boxesPerPallet: boxesPerPallet,
   });
 
-  const totalSalads = numQuantity * getSaladsPerBox(selectedBoxType);
-
   const handleSelectBoxType = (boxName: string) => {
     setSelectedBoxType(boxName);
     const box = DEFAULT_BOX_TYPES.find((b) => b.name === boxName);
     if (box) {
       setBoxesPerPallet(box.defaultBoxesPerPallet);
-      // Re-validar noblejas con la nueva capacidad de palet
       const newMaxPallets = Math.max(0, Math.floor(numQuantity / box.defaultBoxesPerPallet));
       if (numNobPallets > newMaxPallets) {
         setNoblejasPallets(String(newMaxPallets));
@@ -74,7 +76,6 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
   const handleQuantityChange = (newQtyStr: string) => {
     setQuantity(newQtyStr);
     const newQty = Math.max(0, parseInt(newQtyStr, 10) || 0);
-    // Si la nueva cantidad es menor que el total de noblejas actual, ajustar automáticamente
     if (totalNoblejasBoxes > newQty) {
       const newMaxPallets = Math.max(0, Math.floor(newQty / boxesPerPallet));
       const newRemainingCajas = Math.max(0, newQty - newMaxPallets * boxesPerPallet);
@@ -88,66 +89,34 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
     handleQuantityChange(String(current + amount));
   };
 
-  const handleNoblejasPalletsChange = (val: string) => {
-    if (val === "") {
-      setNoblejasPallets("");
-      return;
-    }
-    let p = parseInt(val, 10) || 0;
-    p = Math.max(0, Math.min(p, maxNoblejasPallets));
-    setNoblejasPallets(String(p));
-
-    // Si excede el total junto con las cajas sueltas, ajustar cajas sueltas
-    const remainingForBoxes = Math.max(0, numQuantity - p * boxesPerPallet);
-    if (numNobCajas > remainingForBoxes) {
-      setNoblejasCajas(String(remainingForBoxes));
-    }
-  };
-
-  const handleNoblejasCajasChange = (val: string) => {
-    if (val === "") {
-      setNoblejasCajas("");
-      return;
-    }
-    let c = parseInt(val, 10) || 0;
-    const maxAvailableCajas = Math.max(0, numQuantity - numNobPallets * boxesPerPallet);
-    c = Math.max(0, Math.min(c, maxAvailableCajas));
-    setNoblejasCajas(String(c));
-  };
-
-  const handleAddQuickNobPallet = (pallets: number) => {
-    const current = parseInt(noblejasPallets, 10) || 0;
-    const target = current + pallets;
-    if (target <= maxNoblejasPallets) {
-      setNoblejasPallets(String(target));
-      const remainingForBoxes = Math.max(0, numQuantity - target * boxesPerPallet);
-      if (numNobCajas > remainingForBoxes) {
-        setNoblejasCajas(String(remainingForBoxes));
-      }
-    }
-  };
-
-  const handleResetNoblejas = () => {
+  const handleResetForm = () => {
+    setSaladName("");
+    setQuantity("");
     setNoblejasPallets("");
     setNoblejasCajas("");
+    setLote("");
+    setFechaCaducidad("");
+    setNote("");
+    setShowNoblejasToggle(false);
+    setShowOptionalDetails(false);
+    if (onCancel) onCancel();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
 
     if (!saladName.trim()) {
-      setError("Por favor, introduce el nombre de la ensalada.");
+      notifyError("Formulario incompleto", "Por favor, introduce o selecciona el nombre de la ensalada.");
       return;
     }
 
     if (numQuantity <= 0) {
-      setError("La cantidad de cajas debe ser mayor a 0.");
+      notifyError("Cantidad inválida", "La cantidad de cajas debe ser mayor a 0.");
       return;
     }
 
     if (totalNoblejasBoxes > numQuantity) {
-      setError(`Las cajas de Noblejas (${totalNoblejasBoxes}) no pueden superar el total de la orden (${numQuantity} cajas).`);
+      notifyError("Error en Noblejas", `Las cajas de Noblejas (${totalNoblejasBoxes}) no pueden superar el total de la orden (${numQuantity} cajas).`);
       return;
     }
 
@@ -167,128 +136,144 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
 
     const newSalad: Salad = {
       id: generateId(),
-      name: saladName.trim(),
+      name: saladName.trim().toUpperCase(),
       formats: [newFormat],
     };
 
-    // Añadir a la línea seleccionada e iniciar directamente
+    // Añadir a la línea seleccionada
     await addSalad(newSalad, selectedLine);
 
     if (activeLineCode !== "ALL" && activeLineCode !== selectedLine) {
       setActiveLineCode(selectedLine);
     }
 
-    // Resetear formulario para entrada rápida continua
+    notifySuccess("Orden creada con éxito", `${saladName.trim().toUpperCase()} (${numQuantity} cajas) añadida a línea ${selectedLine}`);
+
+    // Resetear formulario para entrada continua rápida
     setQuantity("");
     setNoblejasPallets("");
     setNoblejasCajas("");
     setLote("");
     setFechaCaducidad("");
     setNote("");
+    setShowNoblejasToggle(false);
+    setShowOptionalDetails(false);
   };
+
+  // Nombres de ensaladas disponibles (catálogo local o fallback)
+  const availableSaladNames = salads && salads.length > 0
+    ? Array.from(new Set(salads.map((s) => s.name)))
+    : DEFAULT_SALADS;
 
   return (
     <div className={cn(
-      "glass-card rounded-3xl p-5 sm:p-7 border shadow-xl relative overflow-hidden transition-all space-y-5",
+      "glass-card rounded-3xl p-5 sm:p-7 border shadow-xl relative overflow-hidden transition-all space-y-6",
       goldMode
         ? "bg-[#141006]/95 border-amber-500/30 text-white"
         : "bg-white/95 border-emerald-600/20 text-slate-900 shadow-emerald-950/5"
     )}>
-      {/* 1. Selector de Línea Destino con Alto Contraste en Ambos Temas */}
+      {/* 1. Cabecera Contextual: Línea activa preseleccionada */}
       <div className={cn(
-        "p-4 rounded-2xl border space-y-3 transition-all",
+        "p-4 rounded-2xl border flex items-center justify-between flex-wrap gap-3 transition-all",
         goldMode
-          ? "bg-amber-500/[0.04] border-amber-500/20"
-          : "bg-emerald-50/70 border-emerald-600/20"
+          ? "bg-amber-500/[0.06] border-amber-500/25 text-amber-300"
+          : "bg-emerald-50/80 border-emerald-600/20 text-emerald-900"
       )}>
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <label className={cn(
-            "text-xs font-black uppercase tracking-wider flex items-center gap-2",
-            goldMode ? "text-amber-300" : "text-emerald-800"
+        <div className="flex items-center gap-3">
+          <div className={cn(
+            "w-9 h-9 rounded-xl flex items-center justify-center font-black shadow-inner shrink-0",
+            goldMode ? "bg-amber-500/20 text-amber-300" : "bg-emerald-600 text-white"
           )}>
-            <Layers className={cn("w-4 h-4", goldMode ? "text-amber-400" : "text-emerald-600")} />
-            <span>¿En qué línea vas a colocar este formato?</span>
-          </label>
-          <span className={cn("text-[11px] font-mono font-bold", goldMode ? "text-white/50" : "text-slate-600")}>
-            Línea activa: <span className={goldMode ? "text-amber-400" : "text-emerald-700"}>{selectedLine}</span>
-          </span>
+            <Layers className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-base sm:text-lg font-black tracking-tight flex items-center gap-2">
+              <span>Nueva Orden</span>
+              <span className="opacity-40">·</span>
+              <span className={cn(
+                "px-2.5 py-0.5 rounded-lg text-sm font-black border",
+                goldMode ? "bg-amber-500/20 border-amber-400 text-amber-300" : "bg-emerald-600 text-white border-emerald-700"
+              )}>
+                Línea {selectedLine}
+              </span>
+            </h2>
+            <p className={cn("text-xs font-semibold mt-0.5", goldMode ? "text-white/50" : "text-slate-500")}>
+              Creación directa de formato de producción
+            </p>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          {DEFAULT_PRODUCTION_LINES.map((line) => {
-            const isSelected = selectedLine === line.code;
-            return (
-              <button
-                key={line.code}
-                type="button"
-                onClick={() => {
-                  setSelectedLine(line.code);
-                  if (activeLineCode !== "ALL" && activeLineCode !== line.code) {
-                    setActiveLineCode(line.code);
-                  }
-                }}
-                className={cn(
-                  "py-3 px-3 rounded-xl border text-center transition-all cursor-pointer font-black text-sm select-none shadow-sm",
-                  isSelected
-                    ? goldMode
-                      ? "bg-amber-500 text-black border-amber-400 shadow-md scale-[1.02]"
-                      : "bg-emerald-600 text-white border-emerald-700 shadow-md scale-[1.02]"
-                    : goldMode
-                    ? "bg-white/5 border-white/10 text-white/70 hover:text-white hover:bg-white/10"
-                    : "bg-white border-slate-300 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-400"
-                )}
-              >
-                {line.name}
-              </button>
-            );
-          })}
-        </div>
+        <button
+          type="button"
+          onClick={() => setShowLineModal(true)}
+          className={cn(
+            "h-10 px-3.5 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95",
+            goldMode
+              ? "bg-white/5 hover:bg-white/10 border-white/20 text-amber-300"
+              : "bg-white hover:bg-emerald-100/60 border-slate-300 text-slate-700"
+          )}
+        >
+          <span>Cambiar Línea</span>
+          <ChevronDown className="w-3.5 h-3.5" />
+        </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
-        {/* 2. Nombre de la Ensalada con chips rápidos */}
-        <div className="space-y-2">
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {/* 2. Seleccionar Ensalada */}
+        <div className="space-y-2.5">
           <div className="flex items-center justify-between">
-            <label className={cn("text-[11px] font-black uppercase tracking-wider", goldMode ? "text-white/70" : "text-slate-700")}>
-              Ensalada
+            <label className={cn("text-xs font-black uppercase tracking-wider block", goldMode ? "text-white/80" : "text-slate-800")}>
+              🥗 Ensalada
             </label>
-            <span className={cn("text-[10px] font-medium", goldMode ? "text-white/40" : "text-slate-500")}>
-              Toca una opción o escribe
+            <span className={cn("text-[11px] font-medium", goldMode ? "text-white/40" : "text-slate-500")}>
+              Selecciona del catálogo o escribe el nombre
             </span>
           </div>
 
-          <div className="flex flex-wrap gap-1.5">
-            {DEFAULT_SALADS.map((name) => {
-              const isSelected = saladName.toLowerCase() === name.toLowerCase();
-              return (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => setSaladName(name)}
-                  className={cn(
-                    "px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer select-none shadow-sm border",
-                    isSelected
-                      ? goldMode
-                        ? "bg-amber-500 text-black border-amber-400 shadow-md scale-[1.03]"
-                        : "bg-emerald-600 text-white border-emerald-700 shadow-md scale-[1.03]"
-                      : goldMode
-                      ? "bg-white/5 text-white/70 hover:text-white hover:bg-white/10 border-white/10"
-                      : "bg-white text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 border-slate-200"
-                  )}
-                >
-                  {name}
-                </button>
-              );
-            })}
-          </div>
+          {/* Chips de Ensaladas */}
+          {availableSaladNames.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {availableSaladNames.map((name) => {
+                const isSelected = saladName.toLowerCase() === name.toLowerCase();
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => setSaladName(name)}
+                    className={cn(
+                      "px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer select-none shadow-sm border min-h-[40px] flex items-center justify-center",
+                      isSelected
+                        ? goldMode
+                          ? "bg-amber-500 text-black border-amber-400 font-black shadow-md scale-[1.03]"
+                          : "bg-emerald-600 text-white border-emerald-700 font-black shadow-md scale-[1.03]"
+                        : goldMode
+                        ? "bg-white/5 text-white/80 hover:text-white hover:bg-white/10 border-white/10"
+                        : "bg-slate-50 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 border-slate-200"
+                    )}
+                  >
+                    {name}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            /* Fallback Sin Catálogo (Requirement 4) */
+            <div className="p-3.5 rounded-2xl border border-dashed border-slate-300 dark:border-white/15 bg-slate-50/50 dark:bg-white/[0.02] flex items-center justify-between gap-3">
+              <span className="text-xs font-semibold text-slate-500 dark:text-white/50">
+                Aún no hay formatos configurados. Escribe el nombre de la ensalada directamente:
+              </span>
+            </div>
+          )}
 
+          {/* Campo de Entrada Directa de Nombre */}
           <input
             type="text"
+            required
             value={saladName}
             onChange={(e) => setSaladName(e.target.value)}
-            placeholder="Ej: ¿Qué ensalada vamos a hacer?"
+            placeholder="Escribe el nombre de la ensalada (Ej: César, Primavera...)"
             className={cn(
-              "w-full h-11 px-3.5 rounded-xl border text-sm transition-all font-medium",
+              "w-full h-11 px-3.5 rounded-xl border text-sm transition-all font-bold min-h-[44px]",
               goldMode
                 ? "bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-amber-400"
                 : "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
@@ -296,10 +281,10 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
           />
         </div>
 
-        {/* 3. Selector de Tipo de Caja */}
-        <div className="space-y-2">
-          <label className={cn("text-[11px] font-black uppercase tracking-wider block", goldMode ? "text-white/70" : "text-slate-700")}>
-            Tipo de Caja
+        {/* 3. Tipo de Caja */}
+        <div className="space-y-2.5">
+          <label className={cn("text-xs font-black uppercase tracking-wider block", goldMode ? "text-white/80" : "text-slate-800")}>
+            📦 Tipo de Caja
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
             {DEFAULT_BOX_TYPES.map((b) => {
@@ -310,7 +295,7 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
                   type="button"
                   onClick={() => handleSelectBoxType(b.name)}
                   className={cn(
-                    "p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col justify-center items-center gap-0.5 select-none shadow-sm",
+                    "p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col justify-center items-center gap-0.5 select-none shadow-sm min-h-[44px]",
                     isSelected
                       ? goldMode
                         ? "bg-amber-500/20 border-amber-500 text-amber-300 shadow-md font-black ring-1 ring-amber-500/30"
@@ -327,51 +312,44 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
           </div>
         </div>
 
-        {/* 4. Cantidad de Cajas Totales y Noblejas (con Capping Estricto y Diseño Equilibrado) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 items-stretch">
-          {/* Columna A: Cantidad Total de Cajas de la Orden */}
-          <div className={cn(
-            "rounded-2xl p-4 border shadow-sm flex flex-col justify-between space-y-3",
-            goldMode ? "bg-white/[0.02] border-white/5" : "bg-emerald-50/40 border-emerald-600/15"
-          )}>
-            <div>
-              <div className="flex items-center justify-between h-5 mb-1.5">
-                <label className={cn("text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5", goldMode ? "text-white/80" : "text-slate-800")}>
-                  <Package className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Cajas Totales de la Orden</span>
-                </label>
-                {numQuantity > 0 && (
-                  <span className="text-xs font-mono font-bold text-emerald-600">
-                    {Math.floor(numQuantity / boxesPerPallet)}p + {numQuantity % boxesPerPallet}c ({numQuantity} c)
-                  </span>
-                )}
-              </div>
-
-              {/* Sublabel invisible para igualar la altura con los sublabels de Noblejas */}
-              <span className="text-[9px] uppercase font-bold block opacity-0 select-none">
-                Cantidad
+        {/* 4. Cajas Totales */}
+        <div className={cn(
+          "rounded-2xl p-4 border shadow-sm space-y-3",
+          goldMode ? "bg-white/[0.02] border-white/5" : "bg-emerald-50/40 border-emerald-600/15"
+        )}>
+          <div className="flex items-center justify-between">
+            <label className={cn("text-xs font-black uppercase tracking-wider flex items-center gap-1.5", goldMode ? "text-white/80" : "text-slate-800")}>
+              <Package className="w-4 h-4 text-emerald-600" />
+              <span>Cajas Totales</span>
+            </label>
+            {numQuantity > 0 && (
+              <span className="text-xs font-mono font-bold text-emerald-600">
+                {Math.floor(numQuantity / boxesPerPallet)} palets completos {numQuantity % boxesPerPallet > 0 ? `+ ${numQuantity % boxesPerPallet} cajas pico` : ""}
               </span>
-            </div>
+            )}
+          </div>
 
-            <div className="flex gap-2 items-center">
-              <input
-                type="number"
-                min="1"
-                value={quantity}
-                onChange={(e) => handleQuantityChange(e.target.value)}
-                placeholder="Ej: 144"
-                className={cn(
-                  "flex-1 h-11 px-3 rounded-xl border text-sm sm:text-base font-mono font-black transition-all",
-                  goldMode
-                    ? "bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-amber-400"
-                    : "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
-                )}
-              />
+          <div className="flex gap-2 items-center flex-wrap sm:flex-nowrap">
+            <input
+              type="number"
+              min="1"
+              required
+              value={quantity}
+              onChange={(e) => handleQuantityChange(e.target.value)}
+              placeholder="Ej: 144"
+              className={cn(
+                "flex-1 h-11 px-3.5 rounded-xl border text-base font-mono font-black transition-all min-h-[44px]",
+                goldMode
+                  ? "bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-amber-400"
+                  : "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
+              )}
+            />
+            <div className="flex gap-1.5 w-full sm:w-auto">
               <button
                 type="button"
                 onClick={() => handleAddQuickQty(boxesPerPallet)}
                 className={cn(
-                  "h-11 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer shrink-0 shadow-sm flex items-center justify-center",
+                  "flex-1 sm:flex-none h-11 px-3.5 rounded-xl border text-xs font-bold transition-all cursor-pointer shrink-0 shadow-sm flex items-center justify-center min-h-[44px]",
                   goldMode
                     ? "bg-white/5 hover:bg-white/10 border-white/10 text-white"
                     : "bg-white hover:bg-emerald-50 border-slate-300 text-slate-800"
@@ -384,7 +362,7 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
                 type="button"
                 onClick={() => handleAddQuickQty(50)}
                 className={cn(
-                  "h-11 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer shrink-0 shadow-sm flex items-center justify-center",
+                  "h-11 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer shrink-0 shadow-sm flex items-center justify-center min-h-[44px]",
                   goldMode
                     ? "bg-white/5 hover:bg-white/10 border-white/10 text-white"
                     : "bg-white hover:bg-emerald-50 border-slate-300 text-slate-800"
@@ -392,214 +370,231 @@ export function QuickQueueBuilder({ goldMode = false }: QuickQueueBuilderProps) 
               >
                 +50
               </button>
+              <button
+                type="button"
+                onClick={() => handleAddQuickQty(100)}
+                className={cn(
+                  "h-11 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer shrink-0 shadow-sm flex items-center justify-center min-h-[44px]",
+                  goldMode
+                    ? "bg-white/5 hover:bg-white/10 border-white/10 text-white"
+                    : "bg-white hover:bg-emerald-50 border-slate-300 text-slate-800"
+                )}
+              >
+                +100
+              </button>
             </div>
-            <p className={cn("text-[10px] font-mono", goldMode ? "text-white/40" : "text-slate-500")}>
-              Total requerido en fábrica para esta orden
-            </p>
           </div>
+        </div>
 
-          {/* Columna B: Noblejas (Limitadas por las cajas de la orden) */}
-          <div className={cn(
-            "rounded-2xl p-4 border shadow-sm flex flex-col justify-between space-y-3",
-            goldMode ? "bg-purple-500/[0.03] border-purple-500/15" : "bg-purple-50/70 border-purple-200"
-          )}>
-            <div>
-              <div className="flex items-center justify-between h-5 mb-1.5">
-                <label className="text-[11px] font-black text-purple-700 uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-purple-500" />
-                  <span>Noblejas (Máx: {numQuantity} cajas)</span>
-                </label>
+        {/* 5. Toggle de Noblejas (Oculto por defecto) */}
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={() => setShowNoblejasToggle(!showNoblejasToggle)}
+            className={cn(
+              "w-full p-3 rounded-xl border text-xs font-bold flex items-center justify-between transition-all cursor-pointer min-h-[44px]",
+              showNoblejasToggle
+                ? goldMode
+                  ? "bg-purple-500/20 border-purple-500/40 text-purple-300"
+                  : "bg-purple-50 border-purple-300 text-purple-800 font-black"
+                : goldMode
+                ? "bg-white/[0.02] border-white/10 text-white/60 hover:bg-white/5"
+                : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+            )}
+          >
+            <span className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-purple-500" />
+              <span>Añadir Noblejas (Opcional)</span>
+              {showNoblejasToggle && totalNoblejasBoxes > 0 && (
+                <span className="font-mono text-[11px] opacity-80">({totalNoblejasBoxes} cajas)</span>
+              )}
+            </span>
+            {showNoblejasToggle ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+
+          {showNoblejasToggle && (
+            <div className={cn(
+              "mt-2 p-4 rounded-2xl border space-y-3 animate-in fade-in duration-200",
+              goldMode ? "bg-purple-500/[0.04] border-purple-500/20" : "bg-purple-50/70 border-purple-200"
+            )}>
+              <div className="flex items-center justify-between text-xs font-bold text-purple-800 dark:text-purple-300">
+                <span>Separación Noblejas (Máx {numQuantity} cajas)</span>
                 {totalNoblejasBoxes > 0 && (
-                  <span className="text-xs font-mono font-bold text-purple-700">
-                    {totalNoblejasBoxes}/{numQuantity} c ({numNobPallets}p + {numNobCajas}c)
-                  </span>
+                  <span className="font-mono">{numNobPallets} palets + {numNobCajas} cajas sueltas</span>
                 )}
               </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <span className={cn("text-[9px] uppercase font-bold block", goldMode ? "text-purple-300/60" : "text-purple-700")}>
-                  Palets (máx {maxNoblejasPallets})
-                </span>
-                <span className={cn("text-[9px] uppercase font-bold block", goldMode ? "text-purple-300/60" : "text-purple-700")}>
-                  Cajas Sueltas
-                </span>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-purple-700 dark:text-purple-300 block">
+                    Palets Noblejas (Máx {maxNoblejasPallets})
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={maxNoblejasPallets}
+                    value={noblejasPallets}
+                    onChange={(e) => setNoblejasPallets(e.target.value)}
+                    placeholder="0"
+                    className="w-full h-11 px-3 rounded-xl border text-sm font-mono font-bold bg-white dark:bg-black/40 border-purple-300 text-purple-950 dark:text-purple-100"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-purple-700 dark:text-purple-300 block">
+                    Cajas Sueltas
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={noblejasCajas}
+                    onChange={(e) => setNoblejasCajas(e.target.value)}
+                    placeholder="0"
+                    className="w-full h-11 px-3 rounded-xl border text-sm font-mono font-bold bg-white dark:bg-black/40 border-purple-300 text-purple-950 dark:text-purple-100"
+                  />
+                </div>
               </div>
             </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex gap-1 items-center">
-                <input
-                  type="number"
-                  min="0"
-                  max={maxNoblejasPallets}
-                  value={noblejasPallets === "" ? "" : noblejasPallets}
-                  onChange={(e) => handleNoblejasPalletsChange(e.target.value)}
-                  placeholder="0"
-                  className={cn(
-                    "w-full h-11 px-2.5 rounded-xl border text-sm font-mono font-bold transition-all",
-                    goldMode
-                      ? "bg-purple-500/10 border-purple-500/20 text-purple-200"
-                      : "bg-white border-purple-300 text-purple-950 placeholder:text-purple-300"
-                  )}
-                />
-                <button
-                  type="button"
-                  disabled={!canAddNobPallet}
-                  onClick={() => handleAddQuickNobPallet(1)}
-                  className={cn(
-                    "h-11 px-2 rounded-xl border text-xs font-bold transition-all shrink-0 shadow-sm flex items-center justify-center",
-                    !canAddNobPallet
-                      ? "opacity-30 cursor-not-allowed border-purple-300/20 bg-purple-500/5 text-purple-400"
-                      : goldMode
-                      ? "bg-purple-500/10 hover:bg-purple-500/20 border-purple-500/30 text-purple-300 cursor-pointer"
-                      : "bg-purple-100 hover:bg-purple-200 border-purple-300 text-purple-800 cursor-pointer"
-                  )}
-                  title={canAddNobPallet ? "Añadir 1 palet de Noblejas" : `No se puede añadir otro palet (límite: ${numQuantity} cajas)`}
-                >
-                  +1p
-                </button>
-              </div>
-
-              <div className="flex gap-1 items-center">
-                <input
-                  type="number"
-                  min="0"
-                  max={Math.max(0, numQuantity - numNobPallets * boxesPerPallet)}
-                  value={noblejasCajas === "" ? "" : noblejasCajas}
-                  onChange={(e) => handleNoblejasCajasChange(e.target.value)}
-                  placeholder="0"
-                  className={cn(
-                    "w-full h-11 px-2.5 rounded-xl border text-sm font-mono font-bold transition-all",
-                    goldMode
-                      ? "bg-purple-500/10 border-purple-500/20 text-purple-200"
-                      : "bg-white border-purple-300 text-purple-950 placeholder:text-purple-300"
-                  )}
-                />
-                <button
-                  type="button"
-                  onClick={handleResetNoblejas}
-                  className={cn(
-                    "h-11 px-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer shrink-0 shadow-sm flex items-center justify-center",
-                    goldMode
-                      ? "bg-white/5 hover:bg-white/10 border-white/10 text-white/40"
-                      : "bg-white hover:bg-slate-100 border-slate-300 text-slate-600"
-                  )}
-                  title="Sin Noblejas (0)"
-                >
-                  0
-                </button>
-              </div>
-            </div>
-            <p className={cn("text-[10px] font-mono", goldMode ? "text-purple-300/60" : "text-purple-700")}>
-              Quedan {remainingMilagroBoxes} cajas para Milagro
-            </p>
-          </div>
-        </div>
-
-        {/* Resumen del reparto en vivo */}
-        {numQuantity > 0 && (
-          <div className={cn(
-            "p-4 rounded-2xl border flex items-center justify-between flex-wrap gap-2 text-xs shadow-sm",
-            goldMode ? "bg-white/5 border-white/10" : "bg-emerald-50 border-emerald-600/20"
-          )}>
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className={cn("font-bold", goldMode ? "text-white/70" : "text-slate-800")}>
-                Milagro en {selectedLine}: <span className="font-mono text-emerald-600 font-black">{calc.pallets} palets + {calc.pico} cajas ({remainingMilagroBoxes} c)</span>
-              </span>
-              {totalNoblejasBoxes > 0 && (
-                <span className="font-bold text-purple-700">
-                  Noblejas: <span className="font-mono font-black">{numNobPallets} palets + {numNobCajas} cajas ({totalNoblejasBoxes} c)</span>
-                </span>
-              )}
-            </div>
-            <span className={cn("text-[11px] font-mono", goldMode ? "text-white/40" : "text-slate-600")}>
-              Total Ensaladas: {totalSalads.toLocaleString()} u
-            </span>
-          </div>
-        )}
-
-        {/* 5. Lote, Caducidad y Notas */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-          <div className="space-y-1">
-            <label className={cn("text-[10px] font-bold uppercase tracking-wider block", goldMode ? "text-white/50" : "text-slate-700")}>
-              Lote
-            </label>
-            <input
-              type="text"
-              value={lote}
-              onChange={(e) => setLote(e.target.value)}
-              placeholder="Ej: L-2611A"
-              className={cn(
-                "w-full h-10 px-3 rounded-xl border text-xs font-mono transition-all",
-                goldMode
-                  ? "bg-white/5 border-white/10 text-white placeholder:text-white/30"
-                  : "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-emerald-600"
-              )}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className={cn("text-[10px] font-bold uppercase tracking-wider block", goldMode ? "text-white/50" : "text-slate-700")}>
-              Caducidad
-            </label>
-            <input
-              type="text"
-              value={fechaCaducidad}
-              onChange={(e) => setFechaCaducidad(e.target.value)}
-              placeholder="Ej: 24/08"
-              className={cn(
-                "w-full h-10 px-3 rounded-xl border text-xs transition-all",
-                goldMode
-                  ? "bg-white/5 border-white/10 text-white placeholder:text-white/30"
-                  : "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-emerald-600"
-              )}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className={cn("text-[10px] font-bold uppercase tracking-wider block", goldMode ? "text-white/50" : "text-slate-700")}>
-              Nota / Alerta Operario
-            </label>
-            <input
-              type="text"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Ej: Control de peso..."
-              className={cn(
-                "w-full h-10 px-3 rounded-xl border text-xs transition-all",
-                goldMode
-                  ? "bg-white/5 border-white/10 text-white placeholder:text-white/30"
-                  : "bg-white border-slate-300 text-slate-900 placeholder:text-slate-400 focus:border-emerald-600"
-              )}
-            />
-          </div>
-        </div>
-
-        {error && (
-          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-500 text-xs font-bold flex items-center gap-2 animate-fade-in">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {/* Botón de Añadir a la Cola */}
-        <button
-          type="submit"
-          disabled={totalNoblejasBoxes > numQuantity || numQuantity <= 0}
-          className={cn(
-            "w-full h-14 rounded-2xl font-black text-sm transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 shadow-xl",
-            totalNoblejasBoxes > numQuantity || numQuantity <= 0
-              ? "opacity-50 cursor-not-allowed bg-slate-400 text-white"
-              : goldMode
-              ? "bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 text-black shadow-amber-500/25"
-              : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30"
           )}
-          id="add-to-queue-submit-btn"
-        >
-          <Plus className="w-5 h-5 stroke-[2.5]" />
-          <span>Añadir a la {selectedLine}</span>
-        </button>
+        </div>
+
+        {/* 6. Detalles Opcionales (Lote, Caducidad, Nota) */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowOptionalDetails(!showOptionalDetails)}
+            className={cn(
+              "w-full p-3 rounded-xl border text-xs font-bold flex items-center justify-between transition-all cursor-pointer min-h-[44px]",
+              showOptionalDetails
+                ? goldMode
+                  ? "bg-amber-500/10 border-amber-400/30 text-amber-300"
+                  : "bg-slate-100 border-slate-300 text-slate-900 font-bold"
+                : goldMode
+                ? "bg-white/[0.02] border-white/10 text-white/60 hover:bg-white/5"
+                : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+            )}
+          >
+            <span className="flex items-center gap-2">
+              <Tag className="w-3.5 h-3.5 opacity-60" />
+              <span>Detalles Opcionales (Lote, Caducidad, Notas)</span>
+            </span>
+            {showOptionalDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+
+          {showOptionalDetails && (
+            <div className="mt-2 p-4 rounded-2xl border border-slate-200 dark:border-white/10 space-y-3 bg-slate-50/50 dark:bg-white/[0.02] animate-in fade-in duration-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-slate-500 dark:text-white/50 block">
+                    Código de Lote
+                  </label>
+                  <input
+                    type="text"
+                    value={lote}
+                    onChange={(e) => setLote(e.target.value)}
+                    placeholder="Ej: L-2409"
+                    className="w-full h-10 px-3 rounded-xl border text-xs font-mono font-bold bg-white dark:bg-black/40 border-slate-300 dark:border-white/15"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-slate-500 dark:text-white/50 block">
+                    Fecha de Caducidad (DLC)
+                  </label>
+                  <input
+                    type="text"
+                    value={fechaCaducidad}
+                    onChange={(e) => setFechaCaducidad(e.target.value)}
+                    placeholder="Ej: 25/09"
+                    className="w-full h-10 px-3 rounded-xl border text-xs font-mono font-bold bg-white dark:bg-black/40 border-slate-300 dark:border-white/15"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-500 dark:text-white/50 block">
+                  Nota / Observaciones
+                </label>
+                <input
+                  type="text"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Instrucciones para el operario..."
+                  className="w-full h-10 px-3 rounded-xl border text-xs font-medium bg-white dark:bg-black/40 border-slate-300 dark:border-white/15"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 7. Vista-Resumen Dinámica (Live Summary Box) */}
+        {saladName.trim() && numQuantity > 0 && (
+          <div className={cn(
+            "p-4 rounded-2xl border shadow-inner flex items-center justify-between flex-wrap gap-2 animate-in slide-in-from-bottom-2 duration-200",
+            goldMode
+              ? "bg-gradient-to-r from-amber-500/20 to-amber-600/10 border-amber-500/40 text-amber-200"
+              : "bg-gradient-to-r from-emerald-600/15 to-teal-600/10 border-emerald-600/40 text-emerald-950 dark:text-emerald-100"
+          )}>
+            <div className="flex items-center gap-2 flex-wrap text-sm sm:text-base font-black">
+              <span className="px-2 py-0.5 rounded bg-black/10 dark:bg-white/10 text-xs uppercase font-mono">
+                Línea {selectedLine}
+              </span>
+              <span>·</span>
+              <span className="truncate max-w-[180px]">{saladName.trim().toUpperCase()}</span>
+              <span>·</span>
+              <span>{selectedBoxType}</span>
+              <span>·</span>
+              <span className="font-mono text-emerald-700 dark:text-emerald-400">{numQuantity} cajas</span>
+              {calc && (
+                <span className="text-xs font-normal opacity-80 font-mono">
+                  ({calc.pallets} pales {calc.pico > 0 ? `+ ${calc.pico} pico` : ""})
+                </span>
+              )}
+            </div>
+
+            {totalNoblejasBoxes > 0 && (
+              <span className="text-xs font-bold bg-purple-500/20 text-purple-800 dark:text-purple-300 px-2.5 py-1 rounded-lg border border-purple-500/30">
+                🏷️ Nob: {totalNoblejasBoxes} c
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* 8. Botones de Acción (Confirmar / Cancelar) */}
+        <div className="pt-2 flex items-center gap-3 flex-wrap sm:flex-nowrap">
+          {onCancel && (
+            <button
+              type="button"
+              onClick={handleResetForm}
+              className={cn(
+                "w-full sm:w-auto h-12 px-5 rounded-2xl font-bold text-xs border transition-all cursor-pointer active:scale-95 shrink-0 min-h-[48px]",
+                goldMode
+                  ? "bg-white/5 hover:bg-white/10 border-white/10 text-white"
+                  : "bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700"
+              )}
+            >
+              Cancelar / Volver
+            </button>
+          )}
+
+          <Button
+            type="submit"
+            disabled={!saladName.trim() || numQuantity <= 0}
+            className={cn(
+              "w-full flex-1 h-12 text-sm sm:text-base font-black rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg cursor-pointer min-h-[48px]",
+              goldMode
+                ? "bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black shadow-amber-500/25"
+                : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/25"
+            )}
+          >
+            <Plus className="w-5 h-5" />
+            <span>Confirmar y Añadir a la Cola</span>
+          </Button>
+        </div>
       </form>
+
+      {/* Modal Selector de Línea */}
+      <LineSelectorModal
+        open={showLineModal}
+        onOpenChange={setShowLineModal}
+        goldMode={goldMode}
+      />
     </div>
   );
 }

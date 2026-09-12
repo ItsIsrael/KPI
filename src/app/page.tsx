@@ -18,11 +18,12 @@ import { ProductionQueue } from "@/components/ProductionQueue";
 import { EditQueueItemDialog } from "@/components/EditQueueItemDialog";
 import { TransitionBanner } from "@/components/TransitionBanner";
 import { cn } from "@/lib/utils";
-import { Calculator as CalcIcon, Maximize, Minimize, Trash2, Play, History, LogOut, LayoutDashboard } from "lucide-react";
+import { Calculator as CalcIcon, Maximize, Minimize, Trash2, Play, History, LogOut, LayoutDashboard, Layers, Plus } from "lucide-react";
 import { LoginScreen } from "@/components/LoginScreen";
 import { ScreenLockOverlay } from "@/components/ScreenLockOverlay";
 import { MultiLineDashboard } from "@/components/MultiLineDashboard";
 import { QuickQueueBuilder } from "@/components/QuickQueueBuilder";
+import { LineSelectorModal } from "@/components/LineSelectorModal";
 import { VersionNotifier } from "@/components/VersionNotifier";
 import { BroadcastListener } from "@/components/BroadcastAlerts";
 import { QualityReminder } from "@/components/QualityReminder";
@@ -30,6 +31,7 @@ import { subscribeToLineChanges } from "@/lib/supabase-service";
 import { useTabClock } from "@/hooks/useTabClock";
 import { supabase } from "@/lib/supabase";
 import { getActiveUserProfile, isAdminRole } from "@/lib/auth";
+import { notifySuccess, notifyError } from "@/lib/notifications";
 
 export default function Home() {
   useTabClock();
@@ -82,6 +84,7 @@ export default function Home() {
 
   // Modal de colores de etiquetas semanales
   const [showLabelsModal, setShowLabelsModal] = useState(false);
+  const [showPrepLineModal, setShowPrepLineModal] = useState(false);
   
   // Filtro de historial
   const [historyFilter, setHistoryFilter] = useState("");
@@ -447,15 +450,34 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <div className="flex items-center gap-1.5 shrink-0 relative z-10">
-              {activeLineCode !== "ALL" && (
+              {activeLineCode !== "ALL" ? (
+                <div className="flex items-center gap-1.5">
+                  <div className={cn(
+                    "px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black border-2 shadow-md flex items-center gap-1.5 uppercase tracking-widest",
+                    goldMode
+                      ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
+                      : "bg-emerald-600 text-white border-emerald-400"
+                  )}>
+                    <span className="text-sm">📍</span>
+                    <span>Línea {activeLineCode}</span>
+                  </div>
+                  <button
+                    onClick={() => setShowPrepLineModal(true)}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-bold border border-white/15 bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer shadow-sm active:scale-95"
+                    title="Cambiar de línea de trabajo"
+                    type="button"
+                  >
+                    Cambiar
+                  </button>
+                </div>
+              ) : (
                 <div className={cn(
                   "px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black border-2 shadow-md flex items-center gap-1.5 uppercase tracking-widest",
                   goldMode
                     ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
                     : "bg-emerald-600 text-white border-emerald-400"
                 )}>
-                  <span className="text-sm">📍</span>
-                  <span>Línea {activeLineCode}</span>
+                  <span>🌐 Dashboard</span>
                 </div>
               )}
 
@@ -471,7 +493,7 @@ export default function Home() {
                     ? "bg-white/5 border-white/10 text-white/70 hover:text-white hover:bg-white/10 hover:scale-105 active:scale-95"
                     : "bg-white border-slate-300 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 hover:scale-105 active:scale-95"
                 )}
-                title="Ver Monitor Multilínea (Dashboard)"
+                title="Ver Monitor Multilínea (Dashboard de Planta)"
                 type="button"
               >
                 <LayoutDashboard className="w-4 h-4" />
@@ -514,16 +536,6 @@ export default function Home() {
             >
               <CalcIcon className="w-4 h-4" />
             </button>
-
-            {/* Cerrar Sesión */}
-            <button
-              onClick={logout}
-              className="h-10 w-10 border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 backdrop-blur-sm text-red-400 rounded-xl cursor-pointer transition-all active:scale-95 flex items-center justify-center animate-fade-in"
-              title="Cerrar sesión"
-              type="button"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
             <Clock />
           </div>
         </div>
@@ -554,8 +566,57 @@ export default function Home() {
 
 
 
+        {/* Estado Vacío Operativo (Requirement 2) */}
+        {queue.length === 0 && activeLineCode !== "ALL" && (
+          <div className={cn(
+            "p-6 sm:p-8 rounded-3xl border text-center space-y-4 shadow-xl transition-all",
+            goldMode
+              ? "bg-[#141006]/90 border-amber-500/30 text-white"
+              : "bg-white/95 border-emerald-600/20 text-slate-900 shadow-emerald-950/5"
+          )}>
+            <div className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
+              <Layers className="w-7 h-7" />
+            </div>
+            <div>
+              <h3 className="text-xl sm:text-2xl font-black tracking-tight">
+                Línea {activeLineCode} no tiene órdenes activas
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-white/50 mt-1 max-w-md mx-auto">
+                La línea está libre y lista para trabajar. Crea la primera orden para generar la cola de producción.
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-3 pt-2 flex-wrap sm:flex-nowrap">
+              <Button
+                onClick={() => {
+                  const formEl = document.getElementById("quick-order-builder");
+                  if (formEl) formEl.scrollIntoView({ behavior: "smooth" });
+                }}
+                className={cn(
+                  "h-12 px-6 text-sm font-black rounded-2xl flex items-center gap-2 shadow-lg cursor-pointer min-h-[48px]",
+                  goldMode
+                    ? "bg-amber-500 text-black hover:bg-amber-400"
+                    : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                )}
+              >
+                <Plus className="w-4 h-4" />
+                <span>Crear primera orden</span>
+              </Button>
+              <Button
+                onClick={() => setActiveLineCode("ALL")}
+                variant="outline"
+                className="h-12 px-5 text-sm font-bold rounded-2xl border-slate-300 dark:border-white/15 cursor-pointer min-h-[48px]"
+              >
+                <LayoutDashboard className="w-4 h-4 mr-1.5" />
+                <span>Ver Dashboard</span>
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Formulario Rápido de Cola para Operarios */}
-        <QuickQueueBuilder goldMode={goldMode} />
+        <div id="quick-order-builder">
+          <QuickQueueBuilder goldMode={goldMode} />
+        </div>
 
         {/* Botón nueva ensalada completa / avanzada */}
         <div className="flex justify-between items-center pt-1">
@@ -627,18 +688,28 @@ export default function Home() {
         <div className="h-4" />
       </div>
 
+      <LineSelectorModal
+        open={showPrepLineModal}
+        onOpenChange={setShowPrepLineModal}
+        goldMode={goldMode}
+      />
+
       {/* Footer */}
       <footer className="border-t border-white/5 py-4 px-4 flex items-center justify-between text-xs text-white/20 relative">
         <div className="flex-1">
           <button
             onClick={() => {
               if (!isAdminRole(authUser?.role)) {
-                alert("⛔ Acción restringida: Solo los usuarios con rol Administrador pueden realizar un borrado de la base de datos.");
+                notifyError("Acción restringida", "Solo los usuarios con rol Administrador pueden realizar un borrado de la base de datos.");
                 return;
               }
 
               if (window.confirm("⚠️ ADVERTENCIA DE ADMINISTRADOR: ¿Estás seguro de que deseas forzar el borrado completo de los datos de esta línea en la base de datos?")) {
-                hardResetDatabase();
+                hardResetDatabase().then(() => {
+                  notifySuccess("Base de datos borrada", "Se han eliminado los datos de la línea actual.");
+                }).catch(() => {
+                  notifyError("Error al borrar", "No se pudo realizar el borrado de la base de datos.");
+                });
               }
             }}
             className="px-3 py-1.5 rounded-lg border border-red-500/20 bg-red-500/5 text-red-500/50 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 transition-all cursor-pointer font-semibold shadow-sm"
@@ -859,16 +930,6 @@ export default function Home() {
                     type="button"
                   >
                     <CalcIcon className="w-4 h-4" />
-                  </button>
-
-                  {/* Cerrar Sesión */}
-                  <button
-                    onClick={logout}
-                    className="h-10 w-10 border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 backdrop-blur-sm text-red-400 rounded-xl cursor-pointer transition-all active:scale-95 flex items-center justify-center animate-fade-in"
-                    title="Cerrar sesión"
-                    type="button"
-                  >
-                    <LogOut className="w-4 h-4" />
                   </button>
                   <Clock />
                 </div>

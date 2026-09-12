@@ -2,9 +2,45 @@
 
 import { useEffect, useState } from "react";
 import type { LineOverview, FormatProgress, Salad, QueueItem, HistoryItem } from "@/types/types";
-import { calculateFormat, DEFAULT_BOX_TYPES, generateId, DEFAULT_SALADS } from "@/types/types";
+import { DEFAULT_BOX_TYPES, generateId, DEFAULT_SALADS } from "@/types/types";
 import { getFactoryOverview, syncProgress, syncLineState, syncQueueItems, saveHistoryLog, subscribeToGlobalChanges } from "@/lib/supabase-service";
 import { getAuthAccessToken } from "@/lib/auth";
+import { notifySuccess } from "@/lib/notifications";
+import { testSupabaseConnection, type SupabaseTestResult } from "@/lib/supabase-test";
+import { useProductionStore } from "@/store/production-store";
+import { cn } from "@/lib/utils";
+import { 
+  Building2, 
+  Package, 
+  RefreshCw, 
+  Wifi, 
+  WifiOff, 
+  Plus, 
+  ArrowRight, 
+  ChevronRight,
+  CheckCircle2,
+  Trophy,
+  Zap,
+  Clock,
+  Sparkles,
+  Bell,
+  Trash2,
+  X,
+  Camera,
+  ListChecks,
+  Database,
+  FileSpreadsheet,
+  Settings,
+  SkipForward,
+  Minus,
+  Megaphone,
+  ChevronLeft,
+  ArrowUpDown
+} from "lucide-react";
+import { ManualOrderScanner } from "@/components/ManualOrderScanner";
+import { ExcelUploader } from "@/components/ExcelUploader";
+import { NoblejasUploader } from "@/components/NoblejasUploader";
+import { BroadcastSenderModal } from "@/components/BroadcastAlerts";
 
 function extractSaladSpecs(name?: string) {
   if (!name) return { weight: null, promoPrice: null, isPromo: false, cleanName: "" };
@@ -45,50 +81,12 @@ function formatDisplayName(codigo10e?: string, name?: string) {
   return `[${upperCode}] ${cleanName}${promoTag}`;
 }
 
-import { testSupabaseConnection, type SupabaseTestResult } from "@/lib/supabase-test";
-import { useProductionStore } from "@/store/production-store";
-import { cn } from "@/lib/utils";
-import { 
-  Building2, 
-  Package, 
-  RefreshCw, 
-  Wifi, 
-  WifiOff, 
-  Plus, 
-  ArrowRight, 
-  ChevronRight,
-  CheckCircle2,
-  Trophy,
-  Zap,
-  Clock,
-  Sparkles,
-  Bell,
-  Trash2,
-  X,
-  Camera,
-  ListChecks,
-  Database,
-  FileSpreadsheet,
-  Settings,
-  SkipForward,
-  Minus,
-  Megaphone,
-  ChevronLeft,
-  ArrowUpDown
-} from "lucide-react";
-import { ManualOrderScanner } from "@/components/ManualOrderScanner";
-import { ExcelUploader } from "@/components/ExcelUploader";
-import { NoblejasUploader } from "@/components/NoblejasUploader";
-import { BroadcastSenderModal } from "@/components/BroadcastAlerts";
-
 interface MultiLineDashboardProps {
   onSelectLine: (lineCode: string) => void;
   goldMode: boolean;
 }
 
 type ViewMode = "ALL" | "PAIR_01" | "PAIR_23" | "CUSTOM";
-
-
 
 let currentDashboardRequestId = 0;
 
@@ -146,7 +144,6 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
     e.stopPropagation();
     setLineOrder((prev) => {
       const currentList = [...prev];
-      // Asegurarse de que todas las líneas existan
       ["K00", "K01", "K02", "K03"].forEach((c) => {
         if (!currentList.includes(c)) currentList.push(c);
       });
@@ -160,14 +157,15 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
       return currentList;
     });
   };
+
   const [connectionTest, setConnectionTest] = useState<SupabaseTestResult | null>(null);
   const [isClearDBConfirmOpen, setIsClearDBConfirmOpen] = useState(false);
+  const [confirmDeleteText, setConfirmDeleteText] = useState("");
   const [openSettingsLineCode, setOpenSettingsLineCode] = useState<string | null>(null);
   const [clearLineTarget, setClearLineTarget] = useState<string | null>(null);
-  // AI anomaly alerts: { [lineCode]: { message, level, firedAt } }
   const [aiAlerts, setAiAlerts] = useState<Record<string, { message: string; level: "warning" | "critical"; firedAt: number }>>({});
-  // Live production estimate: interpolated boxes since last pallet
   const [liveEstimates, setLiveEstimates] = useState<Record<string, number>>({});
+  const [showOrderDetails, setShowOrderDetails] = useState<Record<string, boolean>>({});
   const [collapsedQueues, setCollapsedQueues] = useState<Record<string, boolean>>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("dashboardCollapsedQueues");
@@ -184,9 +182,6 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
 
   const [isTestingConn, setIsTestingConn] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
-  const [feedbackMsg, setFeedbackMsg] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
-
-  // Modal para Cargar Ensalada Rápida directamente desde el Dashboard
   const [quickAddLineCode, setQuickAddLineCode] = useState<string | null>(null);
   const [modalSaladName, setModalSaladName] = useState<string>("César");
   const [modalBoxType, setModalBoxType] = useState<string>("Cartón 4");
@@ -206,87 +201,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
     try {
       const data = await getFactoryOverview();
       if (requestId !== currentDashboardRequestId) return;
-      
-      const localStore = useProductionStore.getState();
-
-      const merged = data.map((o) => {
-        const local = localStore.lineStorage[o.line.code];
-        if (local && local.queue && local.queue.length > 0) {
-          const currentItem = local.queue[local.currentQueueIndex] || local.queue[0];
-          const localProg = currentItem ? local.queueProgress?.[currentItem.id] : undefined;
-
-          // Siempre priorizar datos locales cuando hay cola local con items.
-          // Esto evita que items recién creados desaparezcan si Supabase aún no
-          // ha terminado de escribirlos cuando el dashboard hace fetch.
-          // Si Supabase tiene datos más completos (ej: progreso actualizado desde otro PC),
-          // se usarán los de Supabase solo si la cola local está vacía.
-          const prog = localProg;
-
-          if (currentItem && prog) {
-            const calc = calculateFormat({
-              id: currentItem.formatId,
-              boxType: currentItem.boxType,
-              quantity: currentItem.quantity,
-              noblejas: currentItem.noblejas,
-              boxesPerPallet: currentItem.boxesPerPallet,
-            });
-
-            const totalBoxes = currentItem.quantity;
-            const noblejasBoxes = currentItem.noblejas;
-            const maxNobPallets = noblejasBoxes > 0 ? Math.floor(noblejasBoxes / currentItem.boxesPerPallet) : 0;
-            const totalPallets = calc.pallets + maxNobPallets;
-            const completedPallets = (prog.completedPallets || 0) + (prog.noblejasCompletedPallets || 0);
-            const noblejasDoneBoxes = (prog.noblejasCompletedPallets || 0) * currentItem.boxesPerPallet + (prog.nobjelasPicoCompleted ? (noblejasBoxes % currentItem.boxesPerPallet) : 0);
-            const milagroDoneBoxes = (prog.completedPallets || 0) * currentItem.boxesPerPallet + (prog.picoCompleted ? calc.pico : 0);
-            const completedBoxes = noblejasDoneBoxes + milagroDoneBoxes;
-
-            return {
-              ...o,
-              currentSaladName: currentItem.saladName,
-              currentBoxType: currentItem.boxType,
-              currentLote: currentItem.lote,
-              totalBoxes,
-              completedBoxes,
-              totalPallets,
-              completedPallets,
-              noblejasBoxes,
-              noblejasDoneBoxes,
-              percent: totalBoxes > 0 ? Math.min(Math.round((completedBoxes / totalBoxes) * 100), 100) : 0,
-              queueLength: Math.max(o.queueLength, local.queue.length),
-              pendingCount: Math.max(0, local.queue.length - local.currentQueueIndex - 1),
-              currentItem,
-              nextItem: local.queue[local.currentQueueIndex + 1] || o.nextItem,
-              calc,
-              progress: prog,
-              queue: local.queue,
-              line: {
-                ...o.line,
-                isProducing: local.isProducing ?? o.line.isProducing,
-              },
-            };
-          } else if (currentItem) {
-            // Tiene item pero aún sin progreso — al menos mostrar la cola y el nombre
-            return {
-              ...o,
-              currentSaladName: currentItem.saladName,
-              currentBoxType: currentItem.boxType,
-              currentLote: currentItem.lote,
-              queueLength: Math.max(o.queueLength, local.queue.length),
-              pendingCount: Math.max(0, local.queue.length - local.currentQueueIndex - 1),
-              currentItem,
-              nextItem: local.queue[local.currentQueueIndex + 1] || o.nextItem,
-              queue: local.queue,
-              line: {
-                ...o.line,
-                isProducing: local.isProducing ?? o.line.isProducing,
-              },
-            };
-          }
-        }
-        return o;
-      });
-
-      setOverview(merged);
+      setOverview(data);
     } catch (e) {
       console.error(e);
     } finally {
@@ -746,8 +661,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
     setQuickAddLineCode(null);
     fetchOverview();
     
-    setFeedbackMsg({ text: `¡Ensalada añadida con éxito en ${quickAddLineCode}!`, type: 'success' });
-    setTimeout(() => setFeedbackMsg(null), 3000);
+    notifySuccess("Ensalada añadida", `Añadida con éxito en línea ${quickAddLineCode}`);
   };
 
   const totalBoxesPlant = overview.reduce((acc, o) => acc + o.totalBoxes, 0);
@@ -1150,12 +1064,13 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
           return (
             <div
               key={item.line.id}
+              onClick={() => onSelectLine(item.line.code)}
               className={cn(
-                "rounded-3xl p-5 sm:p-6 border transition-all duration-300 hover:shadow-2xl relative overflow-hidden group space-y-4",
+                "rounded-3xl p-5 sm:p-6 border transition-all duration-300 hover:shadow-2xl relative overflow-hidden group space-y-4 cursor-pointer active:scale-[0.99]",
                 !hasActiveOrders && "h-fit self-start",
                 goldMode
                   ? "border-amber-500/25 hover:border-amber-500/50 bg-[#120e06]/60 backdrop-blur-xl text-white shadow-[0_8px_32px_0_rgba(245,158,11,0.1)]"
-                  : "border-white/50 hover:border-emerald-300 bg-white/50 backdrop-blur-xl text-[#0f291e] shadow-[0_8px_32px_0_rgba(16,185,129,0.08)]",
+                  : "border-white/50 hover:border-emerald-400 bg-white/50 backdrop-blur-xl text-[#0f291e] shadow-[0_8px_32px_0_rgba(16,185,129,0.08)]",
                 isFinished && (goldMode ? "ring-2 ring-amber-400 border-amber-400 bg-amber-950/20" : "ring-2 ring-emerald-500 border-emerald-500 bg-emerald-50/80"),
                 isProducing && "ring-1 ring-emerald-500/30 shadow-xl shadow-emerald-500/5",
                 isDuoView && "p-6 sm:p-7"
@@ -1987,18 +1902,18 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                   )}
                 </div>
               ) : (
-                /* Estado vacío con botón rápido de carga directa */
+                /* Estado vacío simplificado de baja fricción */
                 <div className={cn(
-                  "border border-dashed rounded-2xl p-6 sm:p-8 text-center space-y-3",
-                  goldMode ? "bg-white/[0.02] border-white/10" : "bg-slate-50/70 border-slate-300"
+                  "border border-dashed rounded-2xl p-5 text-center space-y-3",
+                  goldMode ? "bg-white/[0.02] border-white/10" : "bg-slate-50/80 border-slate-300"
                 )}>
-                  <p className={cn("text-sm font-bold", goldMode ? "text-white/60" : "text-[#334155]")}>
-                    ⚪ Línea sin órdenes activas
-                  </p>
-                  <p className={cn("text-xs", goldMode ? "text-white/40" : "text-[#64748b]")}>
-                    Inicia una orden directamente en {item.line.code} con 1 clic:
-                  </p>
-                  <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
+                    <p className={cn("text-xs font-black uppercase tracking-wider", goldMode ? "text-white/80" : "text-slate-700")}>
+                      En espera · 0 órdenes
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-center gap-2 pt-1">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -2008,7 +1923,7 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                         "px-4 py-2.5 rounded-xl text-xs font-black transition-all active:scale-95 inline-flex items-center gap-2 cursor-pointer shadow-md",
                         goldMode
                           ? "bg-amber-500 text-black hover:bg-amber-400"
-                          : "bg-emerald-600 text-white hover:bg-emerald-700"
+                          : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-600/20"
                       )}
                       type="button"
                     >
@@ -2021,14 +1936,14 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
                         onSelectLine(item.line.code);
                       }}
                       className={cn(
-                        "px-4 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 inline-flex items-center gap-2 cursor-pointer border shadow-sm",
+                        "px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 inline-flex items-center gap-1.5 cursor-pointer border shadow-sm",
                         goldMode
                           ? "bg-white/5 hover:bg-white/10 border-white/10 text-white"
                           : "bg-white hover:bg-emerald-50 border-emerald-600/20 text-[#0f291e]"
                       )}
                       type="button"
                     >
-                      <span>✏️ Abrir Panel {item.line.code}</span>
+                      <span>Abrir Panel</span>
                       <ChevronRight className="w-3.5 h-3.5 opacity-60" />
                     </button>
                   </div>
@@ -2357,18 +2272,6 @@ export function MultiLineDashboard({ onSelectLine, goldMode }: MultiLineDashboar
         </div>
       )}
 
-      {/* Toast Feedback */}
-      {feedbackMsg && (
-        <div className="fixed bottom-6 right-6 z-50 animate-slide-up">
-          <div className={cn(
-            "px-4 py-3 rounded-xl shadow-2xl border flex items-center gap-3 text-sm font-bold",
-            feedbackMsg.type === 'success' ? "bg-emerald-600 border-emerald-500 text-white" : "bg-red-600 border-red-500 text-white"
-          )}>
-            <span>{feedbackMsg.type === 'success' ? '✅' : '❌'}</span>
-            <span>{feedbackMsg.text}</span>
-          </div>
-        </div>
-      )}
 
       <ExcelUploader 
         open={isExcelUploaderOpen} 

@@ -6,6 +6,7 @@ import { Tag } from "lucide-react";
 import type { Format, Salad } from "@/types/types";
 import { DEFAULT_BOX_TYPES, generateId } from "@/types/types";
 import { cn } from "@/lib/utils";
+import { notifySuccess, notifyError } from "@/lib/notifications";
 
 interface SaladFormProps {
   editingSalad?: Salad | null;
@@ -242,6 +243,7 @@ export function SaladForm({ editingSalad, formMode = "standard", currentSaladInf
 
     if (newErrors.length > 0) {
       setErrors(newErrors);
+      notifyError("Error de validación", newErrors[0]);
       return;
     }
 
@@ -281,6 +283,7 @@ export function SaladForm({ editingSalad, formMode = "standard", currentSaladInf
       addSalad(salad);
     }
 
+    notifySuccess("Ensalada guardada", `${name.trim().toUpperCase()} registrada correctamente`);
     onClose();
   };
 

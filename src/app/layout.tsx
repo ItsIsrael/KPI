@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import { SileoToasterWrapper } from "@/components/SileoToaster";
 import "./globals.css";
 
 const inter = Inter({
@@ -82,6 +83,7 @@ export default function RootLayout({
           <div className="absolute top-[45%] left-[35%] w-[300px] h-[300px] rounded-full bg-cyan-500/10 blur-[90px] animate-pulse" style={{ animationDuration: '20s' }} />
         </div>
         {children}
+        <SileoToasterWrapper />
       </body>
     </html>
   );
