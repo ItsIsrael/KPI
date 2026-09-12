@@ -32,6 +32,7 @@ import { useTabClock } from "@/hooks/useTabClock";
 import { supabase } from "@/lib/supabase";
 import { getActiveUserProfile, isAdminRole } from "@/lib/auth";
 import { notifySuccess, notifyError } from "@/lib/notifications";
+import { getSavedWorkspacePreference } from "@/lib/workspace-preference";
 
 export default function Home() {
   useTabClock();
@@ -84,7 +85,7 @@ export default function Home() {
 
   // Modal de colores de etiquetas semanales
   const [showLabelsModal, setShowLabelsModal] = useState(false);
-  const [showPrepLineModal, setShowPrepLineModal] = useState(true);
+  const [showPrepLineModal, setShowPrepLineModal] = useState(false);
   
   // Acciones secundarias en vista de producción
   const [showAddQueueMenu, setShowAddQueueMenu] = useState(false);
@@ -130,6 +131,17 @@ export default function Home() {
       }
     }
 
+    // Restaurar preferencia de contexto guardada antes de ocultar pantalla de carga (cero flicker)
+    const savedPref = getSavedWorkspacePreference(useProductionStore.getState().authUser?.id);
+    if (savedPref) {
+      setActiveLineCode(savedPref);
+      setShowPrepLineModal(false);
+    } else {
+      // Primera visita: no asumir K00, preparar Dashboard en segundo plano y mostrar selector
+      setActiveLineCode("ALL", false);
+      setShowPrepLineModal(true);
+    }
+
     const timer = setTimeout(() => {
       setIsLoading(false);
     }, 600);
@@ -148,6 +160,10 @@ export default function Home() {
     getActiveUserProfile().then((profile) => {
       if (profile) {
         useProductionStore.getState().setAuthUser(profile);
+        const userPref = getSavedWorkspacePreference(profile.id);
+        if (userPref && userPref !== useProductionStore.getState().activeLineCode) {
+          useProductionStore.getState().setActiveLineCode(userPref);
+        }
       }
     });
 
@@ -158,6 +174,10 @@ export default function Home() {
           getActiveUserProfile().then((profile) => {
             if (profile) {
               useProductionStore.getState().setAuthUser(profile);
+              const userPref = getSavedWorkspacePreference(profile.id);
+              if (userPref && userPref !== useProductionStore.getState().activeLineCode) {
+                useProductionStore.getState().setActiveLineCode(userPref);
+              }
             }
           });
         } else {
@@ -558,13 +578,23 @@ export default function Home() {
                   </button>
                 </div>
               ) : (
-                <div className={cn(
-                  "px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black border-2 shadow-md flex items-center gap-1.5 uppercase tracking-widest",
-                  goldMode
-                    ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
-                    : "bg-emerald-600 text-white border-emerald-400"
-                )}>
-                  <span>🌐 Dashboard</span>
+                <div className="flex items-center gap-1.5">
+                  <div className={cn(
+                    "px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black border-2 shadow-md flex items-center gap-1.5 uppercase tracking-widest",
+                    goldMode
+                      ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
+                      : "bg-emerald-600 text-white border-emerald-400"
+                  )}>
+                    <span>🌐 Dashboard</span>
+                  </div>
+                  <button
+                    onClick={() => setShowPrepLineModal(true)}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-bold border border-white/15 bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer shadow-sm active:scale-95"
+                    title="Cambiar de línea o vista de trabajo"
+                    type="button"
+                  >
+                    Cambiar
+                  </button>
                 </div>
               )}
 
@@ -974,6 +1004,26 @@ export default function Home() {
                     <span className="opacity-75 font-bold">Hoy:</span>
                     <span>{todayLabel.colorName}</span>
                   </button>
+
+                  {/* Selector de Contexto Dashboard · Cambiar */}
+                  <div className="flex items-center gap-1.5 ml-1 md:ml-3 shrink-0">
+                    <div className={cn(
+                      "px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black border-2 shadow-md flex items-center gap-1.5 uppercase tracking-widest",
+                      goldMode
+                        ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
+                        : "bg-emerald-600 text-white border-emerald-400"
+                    )}>
+                      <span>🌐 Dashboard</span>
+                    </div>
+                    <button
+                      onClick={() => setShowPrepLineModal(true)}
+                      className="px-2.5 py-1.5 rounded-xl text-xs font-bold border border-white/15 bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer shadow-sm active:scale-95"
+                      title="Cambiar de línea o vista de trabajo"
+                      type="button"
+                    >
+                      Cambiar
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2 sm:gap-3 flex-wrap">

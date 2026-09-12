@@ -28,6 +28,7 @@ import {
 } from "@/lib/supabase-service";
 import type { AuthUserProfile } from "@/lib/auth";
 import { signOutSupabase } from "@/lib/auth";
+import { saveWorkspacePreference } from "@/lib/workspace-preference";
 
 // Canal de sincronización local instantánea entre pestañas/monitores (<10ms)
 const localSyncChannel = typeof window !== "undefined" && "BroadcastChannel" in window
@@ -140,7 +141,7 @@ interface ProductionState {
     isProducing: boolean;
     manualOrderDrafts?: OrderRow[];
   }>;
-  setActiveLineCode: (code: string) => Promise<void>;
+  setActiveLineCode: (code: string, persistPreference?: boolean) => Promise<void>;
   loadActiveLineData: () => Promise<void>;
   loadAllLinesData: () => Promise<void>;
   clearAllDatabase: () => Promise<void>;
@@ -291,7 +292,10 @@ export const useProductionStore = create<ProductionState>()(
       activeLineId: null,
       lineStorage: {},
 
-      setActiveLineCode: async (code: string) => {
+      setActiveLineCode: async (code: string, persistPreference = true) => {
+        if (persistPreference) {
+          saveWorkspacePreference(code, get().authUser?.id);
+        }
         const prevCode = get().activeLineCode;
         if (prevCode && prevCode !== "ALL") {
           // Guardar snapshot de la línea actual en memoria local
@@ -2112,17 +2116,26 @@ export const useProductionStore = create<ProductionState>()(
     {
       name: "salad-production-storage",
       partialize: (state) => {
-        // Excluir información de sesión de usuario del localStorage persistente
-        const { authUser: _a, isLoggedIn: _i, currentUser: _c, ...rest } = state;
-        return rest;
+        // Excluir información de sesión de usuario y activeLineCode del localStorage general
+        // para garantizar que la preferencia se gestione exclusivamente con kpi:last-workspace:v1
+        const copy = { ...state };
+        delete (copy as Partial<typeof copy>).authUser;
+        delete (copy as Partial<typeof copy>).isLoggedIn;
+        delete (copy as Partial<typeof copy>).currentUser;
+        delete (copy as Partial<typeof copy>).activeLineCode;
+        return copy;
       },
-      merge: (persistedState: unknown, currentState) => ({
-        ...currentState,
-        ...(persistedState as object),
-        authUser: null,
-        isLoggedIn: false,
-        currentUser: null,
-      }),
+      merge: (persistedState: unknown, currentState) => {
+        const persisted = { ...((persistedState as Record<string, unknown>) || {}) };
+        delete persisted.activeLineCode;
+        return {
+          ...currentState,
+          ...persisted,
+          authUser: null,
+          isLoggedIn: false,
+          currentUser: null,
+        };
+      },
     }
   )
 );

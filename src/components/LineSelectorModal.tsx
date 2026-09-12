@@ -1,9 +1,10 @@
 "use client";
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useProductionStore } from "@/store/production-store";
 import { DEFAULT_PRODUCTION_LINES } from "@/types/types";
+import { getSavedWorkspacePreference } from "@/lib/workspace-preference";
 import { LayoutDashboard, Layers, X } from "lucide-react";
 
 interface LineSelectorModalProps {
@@ -13,15 +14,32 @@ interface LineSelectorModalProps {
 }
 
 export function LineSelectorModal({ open, onOpenChange, goldMode = false }: LineSelectorModalProps) {
-  const { activeLineCode, setActiveLineCode } = useProductionStore();
+  const { activeLineCode, setActiveLineCode, authUser } = useProductionStore();
 
   const handleSelectLine = (code: string) => {
     setActiveLineCode(code);
     onOpenChange(false);
   };
 
+  const handleClose = () => {
+    // Si no existe preferencia guardada previa (primera visita), cerrar equivale
+    // a continuar en el Dashboard de Planta sin dejar un estado ambiguo.
+    const hasPref = getSavedWorkspacePreference(authUser?.id);
+    if (!hasPref) {
+      handleSelectLine("ALL");
+    } else {
+      onOpenChange(false);
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(val) => {
+      if (!val) {
+        handleClose();
+      } else {
+        onOpenChange(true);
+      }
+    }}>
       <DialogContent
         showCloseButton={false}
         className={cn(
@@ -52,10 +70,11 @@ export function LineSelectorModal({ open, onOpenChange, goldMode = false }: Line
           </div>
 
           <button
-            onClick={() => onOpenChange(false)}
+            onClick={handleClose}
             className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer"
             type="button"
-            title="Cerrar"
+            title="Continuar en Dashboard / Cerrar"
+            aria-label="Continuar en Dashboard o cerrar modal"
           >
             <X className="w-4 h-4 opacity-70" />
           </button>
@@ -123,6 +142,20 @@ export function LineSelectorModal({ open, onOpenChange, goldMode = false }: Line
                 </button>
               );
             })}
+          </div>
+
+          {/* Continuar en Dashboard rápido */}
+          <div className="pt-1 text-center">
+            <button
+              type="button"
+              onClick={() => handleSelectLine("ALL")}
+              className={cn(
+                "text-xs font-semibold hover:underline transition-all cursor-pointer opacity-70 hover:opacity-100",
+                goldMode ? "text-amber-300" : "text-emerald-700 dark:text-emerald-300"
+              )}
+            >
+              Continuar al Dashboard de Planta →
+            </button>
           </div>
         </div>
       </DialogContent>

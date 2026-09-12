@@ -119,7 +119,7 @@ export interface SyncSliceState {
   lineStorage: Record<string, LineStorageData>;
   noblejasConfig: Record<string, number>;
 
-  setActiveLineCode: (code: string) => Promise<void>;
+  setActiveLineCode: (code: string, persistPreference?: boolean) => Promise<void>;
   loadActiveLineData: () => Promise<void>;
   loadAllLinesData: () => Promise<void>;
   clearAllDatabase: () => Promise<void>;
