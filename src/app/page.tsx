@@ -84,7 +84,7 @@ export default function Home() {
 
   // Modal de colores de etiquetas semanales
   const [showLabelsModal, setShowLabelsModal] = useState(false);
-  const [showPrepLineModal, setShowPrepLineModal] = useState(false);
+  const [showPrepLineModal, setShowPrepLineModal] = useState(true);
   
   // Filtro de historial
   const [historyFilter, setHistoryFilter] = useState("");
@@ -688,12 +688,6 @@ export default function Home() {
         <div className="h-4" />
       </div>
 
-      <LineSelectorModal
-        open={showPrepLineModal}
-        onOpenChange={setShowPrepLineModal}
-        goldMode={goldMode}
-      />
-
       {/* Footer */}
       <footer className="border-t border-white/5 py-4 px-4 flex items-center justify-between text-xs text-white/20 relative">
         <div className="flex-1">
@@ -1048,6 +1042,13 @@ export default function Home() {
 
       {/* Bloqueo táctil de pantalla en fábrica */}
       <ScreenLockOverlay />
+
+      {/* Selector de Línea Inicial / Contexto */}
+      <LineSelectorModal
+        open={showPrepLineModal}
+        onOpenChange={setShowPrepLineModal}
+        goldMode={goldMode}
+      />
 
       {/* Calculadora */}
       <Calculator />
